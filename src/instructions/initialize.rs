@@ -4,6 +4,7 @@ use pinocchio::{
     instruction::{Seed, Signer},
     program_error::ProgramError,
     pubkey::Pubkey,
+    sysvars::{rent::Rent, Sysvar},
 };
 
 use crate::{
@@ -150,7 +151,8 @@ impl<'info> Initialize<'info> {
 
         // Create bonding curve PDA account
         let space = XToken::LEN;
-        let lamports = 1_000_000; // Minimum rent for account (simplified)
+        let rent = Rent::get()?;
+        let lamports = rent.minimum_balance(space);
 
         let bump_bytes = [bump];
         let seeds = [

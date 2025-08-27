@@ -138,12 +138,7 @@ impl<'info> BuyTokens<'info> {
         }
 
         // Derive bonding curve PDA seeds
-        // let bump = bonding_curve.bump;
-        // let seeds = &[
-        //     BondingCurve::SEED_PREFIX,
-        //     self.accounts.mint.key().as_ref(),
-        //     &[bump],
-        // ];
+        let bump = bonding_curve.bump;
 
         // Create buyer's token account if it doesn't exist
         if self.accounts.buyer_token_account.data_is_empty() {
@@ -177,13 +172,21 @@ impl<'info> BuyTokens<'info> {
         }
 
         // Mint tokens to buyer
+        let bump_bytes = [bump];
+        let seeds = [
+            pinocchio::instruction::Seed::from(XToken::SEED_PREFIX),
+            pinocchio::instruction::Seed::from(self.accounts.mint.key().as_ref()),
+            pinocchio::instruction::Seed::from(&bump_bytes),
+        ];
+        let signer = pinocchio::instruction::Signer::from(&seeds);
+
         pinocchio_token::instructions::MintTo {
             mint: self.accounts.mint,
             account: self.accounts.buyer_token_account,
             mint_authority: self.accounts.bonding_curve,
             amount: self.instruction_data.token_amount,
         }
-        .invoke()?;
+        .invoke_signed(&[signer])?;
 
         // Update bonding curve state
         bonding_curve.update_buy(self.instruction_data.token_amount, total_cost)?;
