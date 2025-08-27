@@ -26,6 +26,8 @@ pub enum XTokenError {
     ArithmeticOverflow,
     /// Invalid authority
     InvalidAuthority,
+    /// Invalid profile data
+    InvalidProfileData,
 }
 
 impl From<XTokenError> for ProgramError {
@@ -43,6 +45,7 @@ impl From<XTokenError> for ProgramError {
             XTokenError::TokenSupplyExhausted => ProgramError::InvalidArgument,
             XTokenError::ArithmeticOverflow => ProgramError::ArithmeticOverflow,
             XTokenError::InvalidAuthority => ProgramError::InvalidArgument,
+            XTokenError::InvalidProfileData => ProgramError::InvalidArgument,
         }
     }
 }

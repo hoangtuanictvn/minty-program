@@ -10,6 +10,8 @@ import {
     instructionAccountNode,
     publicKeyValueNode,
     publicKeyTypeNode,
+    arrayTypeNode,
+    fixedCountNode
 } from 'codama';
 
 export const root = rootNode(
@@ -279,6 +281,71 @@ export const root = rootNode(
                         isSigner: false,
                         isWritable: false,
                         docs: ['Token Program'],
+                    }),
+                ],
+            }),
+            instructionNode({
+                name: 'updateProfile',
+                discriminators: [
+                    constantDiscriminatorNode(
+                        constantValueNode(numberTypeNode('u8'), numberValueNode(3))
+                    ),
+                ],
+                arguments: [
+                    instructionArgumentNode({
+                        name: 'discriminator',
+                        type: numberTypeNode('u8'),
+                        defaultValue: numberValueNode(3),
+                        defaultValueStrategy: 'omitted',
+                    }),
+                    instructionArgumentNode({
+                        name: 'usernameLen',
+                        type: numberTypeNode('u8'),
+                        docs: ['Username length (max 32 characters)'],
+                    }),
+                    instructionArgumentNode({
+                        name: 'bioLen',
+                        type: numberTypeNode('u8'),
+                        docs: ['Bio length (max 200 characters)'],
+                    }),
+                    instructionArgumentNode({
+                        name: '_padding',
+                        type: numberTypeNode('u16'),
+                        docs: ['Padding for alignment'],
+                    }),
+                    instructionArgumentNode({
+                        name: 'username',
+                        type: arrayTypeNode(numberTypeNode('u8'), fixedCountNode(32)),
+                        docs: ['Username (32 bytes)'],
+                    }),
+                    instructionArgumentNode({
+                        name: 'bio',
+                        type: arrayTypeNode(numberTypeNode('u8'), fixedCountNode(200)),
+                        docs: ['Bio (200 bytes)'],
+                    }),
+                ],
+                accounts: [
+                    instructionAccountNode({
+                        name: 'userProfile',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ['User profile account (PDA)'],
+                    }),
+                    instructionAccountNode({
+                        name: 'user',
+                        isSigner: true,
+                        isWritable: true,
+                        docs: ['User wallet (must be signer)'],
+                    }),
+                    instructionAccountNode({
+                        name: 'systemProgram',
+                        defaultValue: publicKeyValueNode(
+                            '11111111111111111111111111111111',
+                            'systemProgram'
+                        ),
+                        isSigner: false,
+                        isWritable: false,
+                        docs: ['System Program'],
                     }),
                 ],
             }),

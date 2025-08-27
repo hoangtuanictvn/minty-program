@@ -5,7 +5,7 @@ use pinocchio::{
 };
 use pinocchio_log::log;
 
-use crate::instructions::{Instruction, Initialize, BuyTokens, SellTokens};
+use crate::instructions::{Instruction, Initialize, BuyTokens, SellTokens, UpdateProfile};
 
 /// Main instruction processor
 #[inline(always)]
@@ -25,7 +25,7 @@ pub fn process_instruction(
         .ok_or(ProgramError::InvalidInstructionData)?;
 
     // Route to appropriate instruction handler
-    match Instruction::try_from(discriminator)? {
+    match Instruction::try_from(*discriminator)? {
         Instruction::Initialize => {
             log!("Instruction: Initialize");
             let mut initialize = Initialize::try_from((accounts, data))?;
@@ -40,6 +40,11 @@ pub fn process_instruction(
             log!("Instruction: SellTokens");
             let mut sell_tokens = SellTokens::try_from((accounts, data))?;
             sell_tokens.handler()
+        }
+        Instruction::UpdateProfile => {
+            log!("Instruction: UpdateProfile");
+            let mut update_profile = UpdateProfile::try_from((accounts, data))?;
+            update_profile.handler()
         }
     }
 }

@@ -9,3 +9,4 @@
 export * from './buyTokens';
 export * from './initialize';
 export * from './sellTokens';
+export * from './updateProfile';

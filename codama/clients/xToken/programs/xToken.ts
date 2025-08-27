@@ -16,6 +16,7 @@ import {
   type ParsedBuyTokensInstruction,
   type ParsedInitializeInstruction,
   type ParsedSellTokensInstruction,
+  type ParsedUpdateProfileInstruction,
 } from '../instructions';
 
 export const X_TOKEN_PROGRAM_ADDRESS =
@@ -25,6 +26,7 @@ export enum XTokenInstruction {
   Initialize,
   BuyTokens,
   SellTokens,
+  UpdateProfile,
 }
 
 export function identifyXTokenInstruction(
@@ -39,6 +41,9 @@ export function identifyXTokenInstruction(
   }
   if (containsBytes(data, getU8Encoder().encode(2), 0)) {
     return XTokenInstruction.SellTokens;
+  }
+  if (containsBytes(data, getU8Encoder().encode(3), 0)) {
+    return XTokenInstruction.UpdateProfile;
   }
   throw new Error(
     'The provided instruction could not be identified as a xToken instruction.',
@@ -56,4 +61,7 @@ export type ParsedXTokenInstruction<
     } & ParsedBuyTokensInstruction<TProgram>)
   | ({
       instructionType: XTokenInstruction.SellTokens;
-    } & ParsedSellTokensInstruction<TProgram>);
+    } & ParsedSellTokensInstruction<TProgram>)
+  | ({
+      instructionType: XTokenInstruction.UpdateProfile;
+    } & ParsedUpdateProfileInstruction<TProgram>);
