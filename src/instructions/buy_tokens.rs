@@ -16,6 +16,8 @@ pub struct BuyTokensAccounts<'info> {
     pub mint: &'info AccountInfo,
     /// Buyer's token account (will be created if doesn't exist)
     pub buyer_token_account: &'info AccountInfo,
+    /// Treasury account (holds SOL for bonding curve)
+    pub treasury: &'info AccountInfo,
     /// Fee recipient account
     pub fee_recipient: &'info AccountInfo,
     /// System program
@@ -28,7 +30,7 @@ pub struct BuyTokensAccounts<'info> {
 
 impl<'info> BuyTokensAccounts<'info> {
     pub fn try_from(accounts: &'info [AccountInfo]) -> Result<Self, ProgramError> {
-        if accounts.len() < 8 {
+        if accounts.len() < 9 {
             return Err(ProgramError::NotEnoughAccountKeys);
         }
 
@@ -37,10 +39,11 @@ impl<'info> BuyTokensAccounts<'info> {
             bonding_curve: &accounts[1],
             mint: &accounts[2],
             buyer_token_account: &accounts[3],
-            fee_recipient: &accounts[4],
-            system_program: &accounts[5],
-            token_program: &accounts[6],
-            associated_token_program: &accounts[7],
+            treasury: &accounts[4],
+            fee_recipient: &accounts[5],
+            system_program: &accounts[6],
+            token_program: &accounts[7],
+            associated_token_program: &accounts[8],
         })
     }
 }
@@ -63,14 +66,24 @@ impl<'info> TryFrom<&'info [u8]> for BuyTokensInstructionData {
     type Error = ProgramError;
 
     fn try_from(data: &'info [u8]) -> Result<Self, Self::Error> {
+        // Expect exactly 16 bytes: token_amount (u64 LE) + max_sol_amount (u64 LE)
         if data.len() != Self::LEN {
             return Err(ProgramError::InvalidInstructionData);
         }
-
-        let result = bytemuck::try_from_bytes::<Self>(data)
-            .map_err(|_| ProgramError::InvalidInstructionData)?;
-
-        Ok(*result)
+        let token_amount = u64::from_le_bytes(
+            data[0..8]
+                .try_into()
+                .map_err(|_| ProgramError::InvalidInstructionData)?,
+        );
+        let max_sol_amount = u64::from_le_bytes(
+            data[8..16]
+                .try_into()
+                .map_err(|_| ProgramError::InvalidInstructionData)?,
+        );
+        Ok(BuyTokensInstructionData {
+            token_amount,
+            max_sol_amount,
+        })
     }
 }
 
@@ -107,22 +120,41 @@ impl<'info> BuyTokens<'info> {
             return Err(XTokenError::InvalidTokenAmount.into());
         }
 
-        // Load bonding curve state
-        let mut bonding_curve_data = self.accounts.bonding_curve.try_borrow_mut_data()?;
-        let bonding_curve = XToken::load_mut(&mut bonding_curve_data)?;
+        // -------- Phase 1: Read bonding curve snapshot (immutable borrow) --------
+        let (bump, _token_mint_key, total_supply_snapshot, max_supply_snapshot) = {
+            let bonding_curve_data = self.accounts.bonding_curve.try_borrow_data()?;
+            let bonding_curve = XToken::load(&bonding_curve_data)?;
 
-        if bonding_curve.is_initialized == 0 {
-            return Err(XTokenError::AccountNotInitialized.into());
+            if bonding_curve.is_initialized == 0 {
+                return Err(XTokenError::AccountNotInitialized.into());
+            }
+
+            if bonding_curve.token_mint != *self.accounts.mint.key() {
+                return Err(XTokenError::InvalidAccountData.into());
+            }
+
+            // Calculate price & fee using immutable snapshot
+            // (We compute below after extracting fields to minimize borrow scope if needed later.)
+            (bonding_curve.bump, bonding_curve.token_mint, bonding_curve.total_supply, bonding_curve.max_supply)
+        }; // immutable borrow dropped here
+
+        // Validate supply bounds using snapshot
+        let new_supply = total_supply_snapshot
+            .checked_add(self.instruction_data.token_amount)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        if new_supply > max_supply_snapshot {
+            return Err(ProgramError::InvalidArgument);
         }
 
-        // Verify mint matches
-        if bonding_curve.token_mint != *self.accounts.mint.key() {
-            return Err(XTokenError::InvalidAccountData.into());
-        }
+        // Re-borrow immutably to compute price and fee with helper methods
+        let (total_cost, fee) = {
+            let bonding_curve_data = self.accounts.bonding_curve.try_borrow_data()?;
+            let bonding_curve = XToken::load(&bonding_curve_data)?;
+            let total_cost = bonding_curve.calculate_buy_price(self.instruction_data.token_amount)?;
+            let fee = bonding_curve.calculate_fee(total_cost)?;
+            (total_cost, fee)
+        }; // drop borrow before CPIs
 
-        // Calculate price
-        let total_cost = bonding_curve.calculate_buy_price(self.instruction_data.token_amount)?;
-        let fee = bonding_curve.calculate_fee(total_cost)?;
         let total_with_fee = total_cost
             .checked_add(fee)
             .ok_or(ProgramError::ArithmeticOverflow)?;
@@ -138,8 +170,15 @@ impl<'info> BuyTokens<'info> {
         }
 
         // Derive bonding curve PDA seeds
-        let bump = bonding_curve.bump;
+        let bump_bytes = [bump];
+        let seeds = [
+            pinocchio::instruction::Seed::from(XToken::SEED_PREFIX),
+            pinocchio::instruction::Seed::from(self.accounts.mint.key().as_ref()),
+            pinocchio::instruction::Seed::from(&bump_bytes),
+        ];
+        let signer = pinocchio::instruction::Signer::from(&seeds);
 
+        // -------- Phase 2: CPI calls (no bonding_curve borrow held) --------
         // Create buyer's token account if it doesn't exist
         if self.accounts.buyer_token_account.data_is_empty() {
             pinocchio_associated_token_account::instructions::Create {
@@ -153,10 +192,10 @@ impl<'info> BuyTokens<'info> {
             .invoke()?;
         }
 
-        // Transfer SOL from buyer to bonding curve
+        // Transfer SOL from buyer to treasury (treasury holds all SOL)
         pinocchio_system::instructions::Transfer {
             from: self.accounts.buyer,
-            to: self.accounts.bonding_curve,
+            to: self.accounts.treasury,
             lamports: total_cost,
         }
         .invoke()?;
@@ -171,15 +210,7 @@ impl<'info> BuyTokens<'info> {
             .invoke()?;
         }
 
-        // Mint tokens to buyer
-        let bump_bytes = [bump];
-        let seeds = [
-            pinocchio::instruction::Seed::from(XToken::SEED_PREFIX),
-            pinocchio::instruction::Seed::from(self.accounts.mint.key().as_ref()),
-            pinocchio::instruction::Seed::from(&bump_bytes),
-        ];
-        let signer = pinocchio::instruction::Signer::from(&seeds);
-
+        // Mint tokens to buyer (PDA as mint authority)
         pinocchio_token::instructions::MintTo {
             mint: self.accounts.mint,
             account: self.accounts.buyer_token_account,
@@ -188,8 +219,12 @@ impl<'info> BuyTokens<'info> {
         }
         .invoke_signed(&[signer])?;
 
-        // Update bonding curve state
-        bonding_curve.update_buy(self.instruction_data.token_amount, total_cost)?;
+        // -------- Phase 3: Re-borrow mutable to update state --------
+        {
+            let mut bonding_curve_data = self.accounts.bonding_curve.try_borrow_mut_data()?;
+            let bonding_curve = XToken::load_mut(&mut bonding_curve_data)?;
+            bonding_curve.update_buy(self.instruction_data.token_amount, total_cost)?;
+        }
 
         Ok(())
     }

@@ -20,6 +20,8 @@ pub struct InitializeAccounts<'info> {
     pub bonding_curve: &'info AccountInfo,
     /// Token mint account
     pub mint: &'info AccountInfo,
+    /// Treasury account (PDA) - holds SOL for bonding curve
+    pub treasury: &'info AccountInfo,
     /// Payer for account creation
     pub payer: &'info AccountInfo,
     /// System program
@@ -32,7 +34,7 @@ pub struct InitializeAccounts<'info> {
 
 impl<'info> InitializeAccounts<'info> {
     pub fn try_from(accounts: &'info [AccountInfo]) -> Result<Self, ProgramError> {
-        if accounts.len() < 7 {
+        if accounts.len() < 8 {
             return Err(ProgramError::NotEnoughAccountKeys);
         }
 
@@ -40,10 +42,11 @@ impl<'info> InitializeAccounts<'info> {
             authority: &accounts[0],
             bonding_curve: &accounts[1],
             mint: &accounts[2],
-            payer: &accounts[3],
-            system_program: &accounts[4],
-            token_program: &accounts[5],
-            rent: &accounts[6],
+            treasury: &accounts[3],
+            payer: &accounts[4],
+            system_program: &accounts[5],
+            token_program: &accounts[6],
+            rent: &accounts[7],
         })
     }
 }
@@ -149,6 +152,17 @@ impl<'info> Initialize<'info> {
             return Err(ProgramError::InvalidSeeds);
         }
 
+        // Derive treasury PDA
+        let treasury_seeds = &[b"treasury", self.accounts.mint.key().as_ref()];
+        let (treasury_address, treasury_bump) =
+            pinocchio::pubkey::find_program_address(treasury_seeds, &crate::ID);
+
+        if treasury_address != *self.accounts.treasury.key() {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+
+
         // Create bonding curve PDA account
         let space = XToken::LEN;
         let rent = Rent::get()?;
@@ -170,6 +184,29 @@ impl<'info> Initialize<'info> {
             owner: &crate::ID,
         }
         .invoke_signed(&[signer])?;
+
+        // Create treasury PDA account (system-owned, space=0)
+        let treasury_space = 0; // Treasury chỉ cần space tối thiểu để hold SOL
+        let treasury_lamports = rent.minimum_balance(treasury_space);
+
+        let treasury_bump_bytes = [treasury_bump];
+        let treasury_seeds = [
+            Seed::from(b"treasury"),
+            Seed::from(self.accounts.mint.key().as_ref()),
+            Seed::from(&treasury_bump_bytes),
+        ];
+        let treasury_signer = Signer::from(&treasury_seeds);
+
+        pinocchio_system::instructions::CreateAccount {
+            from: self.accounts.payer,
+            to: self.accounts.treasury,
+            space: treasury_space as u64,
+            lamports: treasury_lamports,
+            owner: &pinocchio_system::ID,
+        }
+        .invoke_signed(&[treasury_signer])?;
+
+
 
         // Verify mint account exists (should be created by client)
         if self.accounts.mint.data_is_empty() {

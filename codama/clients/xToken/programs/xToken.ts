@@ -20,7 +20,7 @@ import {
 } from '../instructions';
 
 export const X_TOKEN_PROGRAM_ADDRESS =
-  '8ngixonBmuMvzKA3woFu9rgjXqTtZYM4vMsmNgf9KF7S' as Address<'8ngixonBmuMvzKA3woFu9rgjXqTtZYM4vMsmNgf9KF7S'>;
+  'C8XnGp4h3v7Hi1Tun4zD4bh6S5xpSUyp9HxEHtKNBcRB' as Address<'C8XnGp4h3v7Hi1Tun4zD4bh6S5xpSUyp9HxEHtKNBcRB'>;
 
 export enum XTokenInstruction {
   Initialize,
@@ -51,17 +51,17 @@ export function identifyXTokenInstruction(
 }
 
 export type ParsedXTokenInstruction<
-  TProgram extends string = '8ngixonBmuMvzKA3woFu9rgjXqTtZYM4vMsmNgf9KF7S',
+  TProgram extends string = 'C8XnGp4h3v7Hi1Tun4zD4bh6S5xpSUyp9HxEHtKNBcRB',
 > =
   | ({
-      instructionType: XTokenInstruction.Initialize;
-    } & ParsedInitializeInstruction<TProgram>)
+    instructionType: XTokenInstruction.Initialize;
+  } & ParsedInitializeInstruction<TProgram>)
   | ({
-      instructionType: XTokenInstruction.BuyTokens;
-    } & ParsedBuyTokensInstruction<TProgram>)
+    instructionType: XTokenInstruction.BuyTokens;
+  } & ParsedBuyTokensInstruction<TProgram>)
   | ({
-      instructionType: XTokenInstruction.SellTokens;
-    } & ParsedSellTokensInstruction<TProgram>)
+    instructionType: XTokenInstruction.SellTokens;
+  } & ParsedSellTokensInstruction<TProgram>)
   | ({
-      instructionType: XTokenInstruction.UpdateProfile;
-    } & ParsedUpdateProfileInstruction<TProgram>);
+    instructionType: XTokenInstruction.UpdateProfile;
+  } & ParsedUpdateProfileInstruction<TProgram>);

@@ -17,7 +17,7 @@ import {
 export const root = rootNode(
     programNode({
         name: 'x_token',
-        publicKey: '8ngixonBmuMvzKA3woFu9rgjXqTtZYM4vMsmNgf9KF7S',
+        publicKey: 'C8XnGp4h3v7Hi1Tun4zD4bh6S5xpSUyp9HxEHtKNBcRB',
         version: '1.0.0',
         instructions: [
             instructionNode({
@@ -93,6 +93,12 @@ export const root = rootNode(
                         isSigner: false,
                         isWritable: true,
                         docs: ['Token mint account - must be created by client before calling'],
+                    }),
+                    instructionAccountNode({
+                        name: 'treasury',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ['Treasury account (holds SOL for bonding curve)'],
                     }),
                     instructionAccountNode({
                         name: 'payer',
@@ -177,6 +183,12 @@ export const root = rootNode(
                         isSigner: false,
                         isWritable: true,
                         docs: ["Buyer's token account (will be created if doesn't exist)"],
+                    }),
+                    instructionAccountNode({
+                        name: 'treasury',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ['Treasury account (holds SOL for bonding curve)'],
                     }),
                     instructionAccountNode({
                         name: 'feeRecipient',
@@ -267,11 +279,18 @@ export const root = rootNode(
                         docs: ["Seller's token account"],
                     }),
                     instructionAccountNode({
+                        name: 'treasury',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ['Treasury account (holds SOL for bonding curve)'],
+                    }),
+                    instructionAccountNode({
                         name: 'feeRecipient',
                         isSigner: false,
                         isWritable: true,
                         docs: ['Fee recipient account'],
                     }),
+
                     instructionAccountNode({
                         name: 'tokenProgram',
                         defaultValue: publicKeyValueNode(
@@ -281,6 +300,16 @@ export const root = rootNode(
                         isSigner: false,
                         isWritable: false,
                         docs: ['Token Program'],
+                    }),
+                    instructionAccountNode({
+                        name: 'systemProgram',
+                        defaultValue: publicKeyValueNode(
+                            '11111111111111111111111111111111',
+                            'systemProgram'
+                        ),
+                        isSigner: false,
+                        isWritable: false,
+                        docs: ['System Program'],
                     }),
                 ],
             }),

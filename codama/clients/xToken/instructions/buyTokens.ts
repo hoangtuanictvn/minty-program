@@ -45,6 +45,7 @@ export type BuyTokensInstruction<
   TAccountBondingCurve extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountBuyerTokenAccount extends string | AccountMeta<string> = string,
+  TAccountTreasury extends string | AccountMeta<string> = string,
   TAccountFeeRecipient extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends
     | string
@@ -73,6 +74,9 @@ export type BuyTokensInstruction<
       TAccountBuyerTokenAccount extends string
         ? WritableAccount<TAccountBuyerTokenAccount>
         : TAccountBuyerTokenAccount,
+      TAccountTreasury extends string
+        ? WritableAccount<TAccountTreasury>
+        : TAccountTreasury,
       TAccountFeeRecipient extends string
         ? WritableAccount<TAccountFeeRecipient>
         : TAccountFeeRecipient,
@@ -138,6 +142,7 @@ export type BuyTokensInput<
   TAccountBondingCurve extends string = string,
   TAccountMint extends string = string,
   TAccountBuyerTokenAccount extends string = string,
+  TAccountTreasury extends string = string,
   TAccountFeeRecipient extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountTokenProgram extends string = string,
@@ -151,6 +156,8 @@ export type BuyTokensInput<
   mint: Address<TAccountMint>;
   /** Buyer's token account (will be created if doesn't exist) */
   buyerTokenAccount: Address<TAccountBuyerTokenAccount>;
+  /** Treasury account (holds SOL for bonding curve) */
+  treasury: Address<TAccountTreasury>;
   /** Fee recipient account */
   feeRecipient: Address<TAccountFeeRecipient>;
   /** System Program */
@@ -168,6 +175,7 @@ export function getBuyTokensInstruction<
   TAccountBondingCurve extends string,
   TAccountMint extends string,
   TAccountBuyerTokenAccount extends string,
+  TAccountTreasury extends string,
   TAccountFeeRecipient extends string,
   TAccountSystemProgram extends string,
   TAccountTokenProgram extends string,
@@ -179,6 +187,7 @@ export function getBuyTokensInstruction<
     TAccountBondingCurve,
     TAccountMint,
     TAccountBuyerTokenAccount,
+    TAccountTreasury,
     TAccountFeeRecipient,
     TAccountSystemProgram,
     TAccountTokenProgram,
@@ -191,6 +200,7 @@ export function getBuyTokensInstruction<
   TAccountBondingCurve,
   TAccountMint,
   TAccountBuyerTokenAccount,
+  TAccountTreasury,
   TAccountFeeRecipient,
   TAccountSystemProgram,
   TAccountTokenProgram,
@@ -208,6 +218,7 @@ export function getBuyTokensInstruction<
       value: input.buyerTokenAccount ?? null,
       isWritable: true,
     },
+    treasury: { value: input.treasury ?? null, isWritable: true },
     feeRecipient: { value: input.feeRecipient ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
@@ -245,6 +256,7 @@ export function getBuyTokensInstruction<
       getAccountMeta(accounts.bondingCurve),
       getAccountMeta(accounts.mint),
       getAccountMeta(accounts.buyerTokenAccount),
+      getAccountMeta(accounts.treasury),
       getAccountMeta(accounts.feeRecipient),
       getAccountMeta(accounts.systemProgram),
       getAccountMeta(accounts.tokenProgram),
@@ -260,6 +272,7 @@ export function getBuyTokensInstruction<
     TAccountBondingCurve,
     TAccountMint,
     TAccountBuyerTokenAccount,
+    TAccountTreasury,
     TAccountFeeRecipient,
     TAccountSystemProgram,
     TAccountTokenProgram,
@@ -283,14 +296,16 @@ export type ParsedBuyTokensInstruction<
     mint: TAccountMetas[2];
     /** Buyer's token account (will be created if doesn't exist) */
     buyerTokenAccount: TAccountMetas[3];
+    /** Treasury account (holds SOL for bonding curve) */
+    treasury: TAccountMetas[4];
     /** Fee recipient account */
-    feeRecipient: TAccountMetas[4];
+    feeRecipient: TAccountMetas[5];
     /** System Program */
-    systemProgram: TAccountMetas[5];
+    systemProgram: TAccountMetas[6];
     /** Token Program */
-    tokenProgram: TAccountMetas[6];
+    tokenProgram: TAccountMetas[7];
     /** Associated Token Program */
-    associatedTokenProgram: TAccountMetas[7];
+    associatedTokenProgram: TAccountMetas[8];
   };
   data: BuyTokensInstructionData;
 };
@@ -303,7 +318,7 @@ export function parseBuyTokensInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedBuyTokensInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 8) {
+  if (instruction.accounts.length < 9) {
     // TODO: Coded error.
     throw new Error('Not enough accounts');
   }
@@ -320,6 +335,7 @@ export function parseBuyTokensInstruction<
       bondingCurve: getNextAccount(),
       mint: getNextAccount(),
       buyerTokenAccount: getNextAccount(),
+      treasury: getNextAccount(),
       feeRecipient: getNextAccount(),
       systemProgram: getNextAccount(),
       tokenProgram: getNextAccount(),

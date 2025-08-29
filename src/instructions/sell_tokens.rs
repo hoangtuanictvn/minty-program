@@ -16,15 +16,19 @@ pub struct SellTokensAccounts<'info> {
     pub mint: &'info AccountInfo,
     /// Seller's token account
     pub seller_token_account: &'info AccountInfo,
+    /// Treasury account (holds SOL for bonding curve)
+    pub treasury: &'info AccountInfo,
     /// Fee recipient account
     pub fee_recipient: &'info AccountInfo,
     /// Token program
     pub token_program: &'info AccountInfo,
+    /// System program
+    pub system_program: &'info AccountInfo,
 }
 
 impl<'info> SellTokensAccounts<'info> {
     pub fn try_from(accounts: &'info [AccountInfo]) -> Result<Self, ProgramError> {
-        if accounts.len() < 6 {
+        if accounts.len() < 8 {
             return Err(ProgramError::NotEnoughAccountKeys);
         }
 
@@ -33,8 +37,10 @@ impl<'info> SellTokensAccounts<'info> {
             bonding_curve: &accounts[1],
             mint: &accounts[2],
             seller_token_account: &accounts[3],
-            fee_recipient: &accounts[4],
-            token_program: &accounts[5],
+            treasury: &accounts[4],
+            fee_recipient: &accounts[5],
+            token_program: &accounts[6],
+            system_program: &accounts[7],
         })
     }
 }
@@ -57,14 +63,26 @@ impl<'info> TryFrom<&'info [u8]> for SellTokensInstructionData {
     type Error = ProgramError;
 
     fn try_from(data: &'info [u8]) -> Result<Self, Self::Error> {
-        if data.len() != Self::LEN {
+        // Expect exactly 16 bytes: token_amount (u64 LE) + min_sol_amount (u64 LE)
+        if data.len() != 16 {
             return Err(ProgramError::InvalidInstructionData);
         }
 
-        let result = bytemuck::try_from_bytes::<Self>(data)
-            .map_err(|_| ProgramError::InvalidInstructionData)?;
+        let token_amount = u64::from_le_bytes(
+            data[0..8]
+                .try_into()
+                .map_err(|_| ProgramError::InvalidInstructionData)?,
+        );
+        let min_sol_amount = u64::from_le_bytes(
+            data[8..16]
+                .try_into()
+                .map_err(|_| ProgramError::InvalidInstructionData)?,
+        );
 
-        Ok(*result)
+        Ok(SellTokensInstructionData {
+            token_amount,
+            min_sol_amount,
+        })
     }
 }
 
@@ -101,40 +119,50 @@ impl<'info> SellTokens<'info> {
             return Err(XTokenError::InvalidTokenAmount.into());
         }
 
-        // Load bonding curve state
-        let mut bonding_curve_data = self.accounts.bonding_curve.try_borrow_mut_data()?;
-        let bonding_curve = XToken::load_mut(&mut bonding_curve_data)?;
+        // -------- Phase 1: Read bonding curve snapshot (immutable borrow) --------
+        let (bump, _token_mint_key, _total_supply_snapshot, total_proceeds, fee, net_proceeds) = {
+            let bonding_curve_data = self.accounts.bonding_curve.try_borrow_data()?;
+            let bonding_curve = XToken::load(&bonding_curve_data)?;
 
-        if bonding_curve.is_initialized == 0 {
-            return Err(XTokenError::AccountNotInitialized.into());
-        }
+            if bonding_curve.is_initialized == 0 {
+                return Err(XTokenError::AccountNotInitialized.into());
+            }
 
-        // Verify mint matches
-        if bonding_curve.token_mint != *self.accounts.mint.key() {
-            return Err(XTokenError::InvalidAccountData.into());
-        }
+            // Verify mint matches
+            if bonding_curve.token_mint != *self.accounts.mint.key() {
+                return Err(XTokenError::InvalidAccountData.into());
+            }
 
-        // Calculate price
-        let total_proceeds =
-            bonding_curve.calculate_sell_price(self.instruction_data.token_amount)?;
-        let fee = bonding_curve.calculate_fee(total_proceeds)?;
-        let net_proceeds = total_proceeds
-            .checked_sub(fee)
-            .ok_or(ProgramError::ArithmeticOverflow)?;
+            // Calculate price and fee using immutable snapshot
+            let total_proceeds = bonding_curve.calculate_sell_price(self.instruction_data.token_amount)?;
+            let fee = bonding_curve.calculate_fee(total_proceeds)?;
+            let net_proceeds = total_proceeds
+                .checked_sub(fee)
+                .ok_or(ProgramError::ArithmeticOverflow)?;
+
+            (bonding_curve.bump, bonding_curve.token_mint, bonding_curve.total_supply, total_proceeds, fee, net_proceeds)
+        }; // immutable borrow dropped here
 
         // Check slippage protection
         if net_proceeds < self.instruction_data.min_sol_amount {
             return Err(XTokenError::SlippageExceeded.into());
         }
 
-        // Check bonding curve has enough SOL
-        if self.accounts.bonding_curve.lamports() < total_proceeds {
+        // Check treasury has enough SOL
+        if self.accounts.treasury.lamports() < total_proceeds {
             return Err(XTokenError::InsufficientFunds.into());
         }
 
-        // Derive bonding curve PDA seeds
-        let _bump = bonding_curve.bump;
+        // Derive bonding curve PDA seeds (for potential mint auth usage) and treasury seeds for signed transfers
+        let bump_bytes = [bump];
+        let bc_seeds = [
+            pinocchio::instruction::Seed::from(XToken::SEED_PREFIX),
+            pinocchio::instruction::Seed::from(self.accounts.mint.key().as_ref()),
+            pinocchio::instruction::Seed::from(&bump_bytes),
+        ];
+        let _bonding_curve_signer = pinocchio::instruction::Signer::from(&bc_seeds);
 
+        // -------- Phase 2: CPI calls (no bonding_curve borrow held) --------
         // Burn tokens from seller
         pinocchio_token::instructions::Burn {
             mint: self.accounts.mint,
@@ -144,34 +172,93 @@ impl<'info> SellTokens<'info> {
         }
         .invoke()?;
 
-        // Transfer SOL from bonding curve to seller
-        let mut bonding_curve_lamports = self.accounts.bonding_curve.try_borrow_mut_lamports()?;
-        let mut seller_lamports = self.accounts.seller.try_borrow_mut_lamports()?;
 
-        *bonding_curve_lamports = bonding_curve_lamports
-            .checked_sub(net_proceeds)
-            .ok_or(ProgramError::ArithmeticOverflow)?;
 
-        *seller_lamports = seller_lamports
-            .checked_add(net_proceeds)
-            .ok_or(ProgramError::ArithmeticOverflow)?;
+        // Transfer SOL from treasury to seller/fee
+        // Support both treasury owner patterns:
+        // - System Program owned PDA (space=0): use invoke_signed(SystemProgram::Transfer)
+        // - Program owned account with data: mutate lamports directly
+        let is_system_owned_treasury = unsafe { *self.accounts.treasury.owner() == pinocchio_system::ID };
+        if is_system_owned_treasury {
+            // System-owned treasury: signed transfers
+            let (treasury_pda, treasury_bump) = pinocchio::pubkey::find_program_address(
+                &[b"treasury", self.accounts.mint.key().as_ref()],
+                &crate::ID,
+            );
 
-        // Transfer fee to fee recipient
-        if fee > 0 {
-            let mut fee_recipient_lamports =
-                self.accounts.fee_recipient.try_borrow_mut_lamports()?;
+            if treasury_pda != *self.accounts.treasury.key() {
+                return Err(ProgramError::InvalidSeeds);
+            }
 
-            *bonding_curve_lamports = bonding_curve_lamports
-                .checked_sub(fee)
-                .ok_or(ProgramError::ArithmeticOverflow)?;
+            let tb_bytes = [treasury_bump];
+            let treasury_seeds = [
+                pinocchio::instruction::Seed::from(b"treasury"),
+                pinocchio::instruction::Seed::from(self.accounts.mint.key().as_ref()),
+                pinocchio::instruction::Seed::from(&tb_bytes),
+            ];
+            let treasury_signer = pinocchio::instruction::Signer::from(&treasury_seeds);
 
-            *fee_recipient_lamports = fee_recipient_lamports
-                .checked_add(fee)
-                .ok_or(ProgramError::ArithmeticOverflow)?;
+            pinocchio_system::instructions::Transfer {
+                from: self.accounts.treasury,
+                to: self.accounts.seller,
+                lamports: net_proceeds,
+            }
+            .invoke_signed(&[treasury_signer])?;
+
+            if fee > 0 {
+                // Recreate signer since previous invoke_signed moved it
+                let tb_bytes2 = [treasury_bump];
+                let treasury_seeds2 = [
+                    pinocchio::instruction::Seed::from(b"treasury"),
+                    pinocchio::instruction::Seed::from(self.accounts.mint.key().as_ref()),
+                    pinocchio::instruction::Seed::from(&tb_bytes2),
+                ];
+                let treasury_signer2 = pinocchio::instruction::Signer::from(&treasury_seeds2);
+
+                pinocchio_system::instructions::Transfer {
+                    from: self.accounts.treasury,
+                    to: self.accounts.fee_recipient,
+                    lamports: fee,
+                }
+                .invoke_signed(&[treasury_signer2])?;
+            }
+        } else {
+            // Program-owned treasury: mutate lamports directly
+            {
+                let mut treasury_lamports = self.accounts.treasury.try_borrow_mut_lamports()?;
+                let mut seller_lamports = self.accounts.seller.try_borrow_mut_lamports()?;
+                // safety checks
+                if *treasury_lamports < net_proceeds {
+                    return Err(XTokenError::InsufficientFunds.into());
+                }
+                *treasury_lamports = treasury_lamports
+                    .checked_sub(net_proceeds)
+                    .ok_or(ProgramError::ArithmeticOverflow)?;
+                *seller_lamports = seller_lamports
+                    .checked_add(net_proceeds)
+                    .ok_or(ProgramError::ArithmeticOverflow)?;
+            }
+            if fee > 0 {
+                let mut treasury_lamports = self.accounts.treasury.try_borrow_mut_lamports()?;
+                let mut fee_lamports = self.accounts.fee_recipient.try_borrow_mut_lamports()?;
+                if *treasury_lamports < fee {
+                    return Err(XTokenError::InsufficientFunds.into());
+                }
+                *treasury_lamports = treasury_lamports
+                    .checked_sub(fee)
+                    .ok_or(ProgramError::ArithmeticOverflow)?;
+                *fee_lamports = fee_lamports
+                    .checked_add(fee)
+                    .ok_or(ProgramError::ArithmeticOverflow)?;
+            }
         }
 
-        // Update bonding curve state
-        bonding_curve.update_sell(self.instruction_data.token_amount, total_proceeds)?;
+        // -------- Phase 3: Re-borrow mutable to update state --------
+        {
+            let mut bonding_curve_data = self.accounts.bonding_curve.try_borrow_mut_data()?;
+            let bonding_curve = XToken::load_mut(&mut bonding_curve_data)?;
+            bonding_curve.update_sell(self.instruction_data.token_amount, total_proceeds)?;
+        }
 
         Ok(())
     }

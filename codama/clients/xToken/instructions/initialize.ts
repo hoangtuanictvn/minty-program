@@ -51,6 +51,7 @@ export type InitializeInstruction<
   TAccountAuthority extends string | AccountMeta<string> = string,
   TAccountBondingCurve extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
+  TAccountTreasury extends string | AccountMeta<string> = string,
   TAccountPayer extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends
     | string
@@ -74,6 +75,9 @@ export type InitializeInstruction<
       TAccountMint extends string
         ? WritableAccount<TAccountMint>
         : TAccountMint,
+      TAccountTreasury extends string
+        ? WritableAccount<TAccountTreasury>
+        : TAccountTreasury,
       TAccountPayer extends string
         ? WritableSignerAccount<TAccountPayer> &
             AccountSignerMeta<TAccountPayer>
@@ -175,6 +179,7 @@ export type InitializeInput<
   TAccountAuthority extends string = string,
   TAccountBondingCurve extends string = string,
   TAccountMint extends string = string,
+  TAccountTreasury extends string = string,
   TAccountPayer extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountTokenProgram extends string = string,
@@ -186,6 +191,8 @@ export type InitializeInput<
   bondingCurve: Address<TAccountBondingCurve>;
   /** Token mint account - must be created by client before calling */
   mint: Address<TAccountMint>;
+  /** Treasury account (holds SOL for bonding curve) */
+  treasury: Address<TAccountTreasury>;
   /** Payer for account creation and rent */
   payer: TransactionSigner<TAccountPayer>;
   /** System Program */
@@ -208,6 +215,7 @@ export function getInitializeInstruction<
   TAccountAuthority extends string,
   TAccountBondingCurve extends string,
   TAccountMint extends string,
+  TAccountTreasury extends string,
   TAccountPayer extends string,
   TAccountSystemProgram extends string,
   TAccountTokenProgram extends string,
@@ -218,6 +226,7 @@ export function getInitializeInstruction<
     TAccountAuthority,
     TAccountBondingCurve,
     TAccountMint,
+    TAccountTreasury,
     TAccountPayer,
     TAccountSystemProgram,
     TAccountTokenProgram,
@@ -229,6 +238,7 @@ export function getInitializeInstruction<
   TAccountAuthority,
   TAccountBondingCurve,
   TAccountMint,
+  TAccountTreasury,
   TAccountPayer,
   TAccountSystemProgram,
   TAccountTokenProgram,
@@ -242,6 +252,7 @@ export function getInitializeInstruction<
     authority: { value: input.authority ?? null, isWritable: false },
     bondingCurve: { value: input.bondingCurve ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: true },
+    treasury: { value: input.treasury ?? null, isWritable: true },
     payer: { value: input.payer ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
@@ -271,6 +282,7 @@ export function getInitializeInstruction<
       getAccountMeta(accounts.authority),
       getAccountMeta(accounts.bondingCurve),
       getAccountMeta(accounts.mint),
+      getAccountMeta(accounts.treasury),
       getAccountMeta(accounts.payer),
       getAccountMeta(accounts.systemProgram),
       getAccountMeta(accounts.tokenProgram),
@@ -285,6 +297,7 @@ export function getInitializeInstruction<
     TAccountAuthority,
     TAccountBondingCurve,
     TAccountMint,
+    TAccountTreasury,
     TAccountPayer,
     TAccountSystemProgram,
     TAccountTokenProgram,
@@ -306,14 +319,16 @@ export type ParsedInitializeInstruction<
     bondingCurve: TAccountMetas[1];
     /** Token mint account - must be created by client before calling */
     mint: TAccountMetas[2];
+    /** Treasury account (holds SOL for bonding curve) */
+    treasury: TAccountMetas[3];
     /** Payer for account creation and rent */
-    payer: TAccountMetas[3];
+    payer: TAccountMetas[4];
     /** System Program */
-    systemProgram: TAccountMetas[4];
+    systemProgram: TAccountMetas[5];
     /** Token Program */
-    tokenProgram: TAccountMetas[5];
+    tokenProgram: TAccountMetas[6];
     /** Rent sysvar */
-    rent: TAccountMetas[6];
+    rent: TAccountMetas[7];
   };
   data: InitializeInstructionData;
 };
@@ -326,7 +341,7 @@ export function parseInitializeInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedInitializeInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 7) {
+  if (instruction.accounts.length < 8) {
     // TODO: Coded error.
     throw new Error('Not enough accounts');
   }
@@ -342,6 +357,7 @@ export function parseInitializeInstruction<
       authority: getNextAccount(),
       bondingCurve: getNextAccount(),
       mint: getNextAccount(),
+      treasury: getNextAccount(),
       payer: getNextAccount(),
       systemProgram: getNextAccount(),
       tokenProgram: getNextAccount(),

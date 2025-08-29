@@ -45,10 +45,14 @@ export type SellTokensInstruction<
   TAccountBondingCurve extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountSellerTokenAccount extends string | AccountMeta<string> = string,
+  TAccountTreasury extends string | AccountMeta<string> = string,
   TAccountFeeRecipient extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends
     | string
     | AccountMeta<string> = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+  TAccountSystemProgram extends
+    | string
+    | AccountMeta<string> = '11111111111111111111111111111111',
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -67,12 +71,18 @@ export type SellTokensInstruction<
       TAccountSellerTokenAccount extends string
         ? WritableAccount<TAccountSellerTokenAccount>
         : TAccountSellerTokenAccount,
+      TAccountTreasury extends string
+        ? WritableAccount<TAccountTreasury>
+        : TAccountTreasury,
       TAccountFeeRecipient extends string
         ? WritableAccount<TAccountFeeRecipient>
         : TAccountFeeRecipient,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
+      TAccountSystemProgram extends string
+        ? ReadonlyAccount<TAccountSystemProgram>
+        : TAccountSystemProgram,
       ...TRemainingAccounts,
     ]
   >;
@@ -126,8 +136,10 @@ export type SellTokensInput<
   TAccountBondingCurve extends string = string,
   TAccountMint extends string = string,
   TAccountSellerTokenAccount extends string = string,
+  TAccountTreasury extends string = string,
   TAccountFeeRecipient extends string = string,
   TAccountTokenProgram extends string = string,
+  TAccountSystemProgram extends string = string,
 > = {
   /** Seller account */
   seller: TransactionSigner<TAccountSeller>;
@@ -137,10 +149,14 @@ export type SellTokensInput<
   mint: Address<TAccountMint>;
   /** Seller's token account */
   sellerTokenAccount: Address<TAccountSellerTokenAccount>;
+  /** Treasury account (holds SOL for bonding curve) */
+  treasury: Address<TAccountTreasury>;
   /** Fee recipient account */
   feeRecipient: Address<TAccountFeeRecipient>;
   /** Token Program */
   tokenProgram?: Address<TAccountTokenProgram>;
+  /** System Program */
+  systemProgram?: Address<TAccountSystemProgram>;
   tokenAmount: SellTokensInstructionDataArgs['tokenAmount'];
   minSolAmount: SellTokensInstructionDataArgs['minSolAmount'];
 };
@@ -150,8 +166,10 @@ export function getSellTokensInstruction<
   TAccountBondingCurve extends string,
   TAccountMint extends string,
   TAccountSellerTokenAccount extends string,
+  TAccountTreasury extends string,
   TAccountFeeRecipient extends string,
   TAccountTokenProgram extends string,
+  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof X_TOKEN_PROGRAM_ADDRESS,
 >(
   input: SellTokensInput<
@@ -159,8 +177,10 @@ export function getSellTokensInstruction<
     TAccountBondingCurve,
     TAccountMint,
     TAccountSellerTokenAccount,
+    TAccountTreasury,
     TAccountFeeRecipient,
-    TAccountTokenProgram
+    TAccountTokenProgram,
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): SellTokensInstruction<
@@ -169,8 +189,10 @@ export function getSellTokensInstruction<
   TAccountBondingCurve,
   TAccountMint,
   TAccountSellerTokenAccount,
+  TAccountTreasury,
   TAccountFeeRecipient,
-  TAccountTokenProgram
+  TAccountTokenProgram,
+  TAccountSystemProgram
 > {
   // Program address.
   const programAddress = config?.programAddress ?? X_TOKEN_PROGRAM_ADDRESS;
@@ -184,8 +206,10 @@ export function getSellTokensInstruction<
       value: input.sellerTokenAccount ?? null,
       isWritable: true,
     },
+    treasury: { value: input.treasury ?? null, isWritable: true },
     feeRecipient: { value: input.feeRecipient ?? null, isWritable: true },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
+    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -200,6 +224,10 @@ export function getSellTokensInstruction<
     accounts.tokenProgram.value =
       'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' as Address<'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'>;
   }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      '11111111111111111111111111111111' as Address<'11111111111111111111111111111111'>;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
   const instruction = {
@@ -208,8 +236,10 @@ export function getSellTokensInstruction<
       getAccountMeta(accounts.bondingCurve),
       getAccountMeta(accounts.mint),
       getAccountMeta(accounts.sellerTokenAccount),
+      getAccountMeta(accounts.treasury),
       getAccountMeta(accounts.feeRecipient),
       getAccountMeta(accounts.tokenProgram),
+      getAccountMeta(accounts.systemProgram),
     ],
     programAddress,
     data: getSellTokensInstructionDataEncoder().encode(
@@ -221,8 +251,10 @@ export function getSellTokensInstruction<
     TAccountBondingCurve,
     TAccountMint,
     TAccountSellerTokenAccount,
+    TAccountTreasury,
     TAccountFeeRecipient,
-    TAccountTokenProgram
+    TAccountTokenProgram,
+    TAccountSystemProgram
   >;
 
   return instruction;
@@ -242,10 +274,14 @@ export type ParsedSellTokensInstruction<
     mint: TAccountMetas[2];
     /** Seller's token account */
     sellerTokenAccount: TAccountMetas[3];
+    /** Treasury account (holds SOL for bonding curve) */
+    treasury: TAccountMetas[4];
     /** Fee recipient account */
-    feeRecipient: TAccountMetas[4];
+    feeRecipient: TAccountMetas[5];
     /** Token Program */
-    tokenProgram: TAccountMetas[5];
+    tokenProgram: TAccountMetas[6];
+    /** System Program */
+    systemProgram: TAccountMetas[7];
   };
   data: SellTokensInstructionData;
 };
@@ -258,7 +294,7 @@ export function parseSellTokensInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedSellTokensInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 6) {
+  if (instruction.accounts.length < 8) {
     // TODO: Coded error.
     throw new Error('Not enough accounts');
   }
@@ -275,8 +311,10 @@ export function parseSellTokensInstruction<
       bondingCurve: getNextAccount(),
       mint: getNextAccount(),
       sellerTokenAccount: getNextAccount(),
+      treasury: getNextAccount(),
       feeRecipient: getNextAccount(),
       tokenProgram: getNextAccount(),
+      systemProgram: getNextAccount(),
     },
     data: getSellTokensInstructionDataDecoder().decode(instruction.data),
   };
