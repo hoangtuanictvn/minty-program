@@ -149,7 +149,7 @@ impl XToken {
         }
     }
 
-    /// Linear pricing: price = base_price + slope * supply
+    /// Linear pricing: price_per_token = base_price + slope * (avg_supply_tokens)
     fn calculate_linear_price(
         &self,
         start_supply: u64,
@@ -167,21 +167,23 @@ impl XToken {
                 self.slope
                     .checked_mul(avg_supply)
                     .ok_or(ProgramError::ArithmeticOverflow)?
-                    .checked_div(1_000_000_000) // Scale down
+                    .checked_div(1_000_000_000)
                     .ok_or(ProgramError::ArithmeticOverflow)?,
             )
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
-        let quantity = end_supply
+        let quantity_base_units = end_supply
             .checked_sub(start_supply)
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
         price_per_token
-            .checked_mul(quantity)
-            .ok_or(ProgramError::ArithmeticOverflow.into())
+            .checked_mul(quantity_base_units)
+            .ok_or(ProgramError::ArithmeticOverflow)?
+            .checked_div(1_000_000_000)
+            .ok_or(ProgramError::ArithmeticOverflow)
     }
 
-    /// Exponential pricing: price = base_price * (1 + slope)^supply
+    /// Exponential pricing (simplified): price_per_token = base_price * (1 + slope)
     fn calculate_exponential_price(
         &self,
         start_supply: u64,
@@ -189,7 +191,7 @@ impl XToken {
     ) -> Result<u64, ProgramError> {
         // Simplified exponential calculation for demonstration
         // In production, you'd want more sophisticated math
-        let quantity = end_supply
+        let quantity_base_units = end_supply
             .checked_sub(start_supply)
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
@@ -197,6 +199,7 @@ impl XToken {
             .checked_add(self.slope)
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
+        // price_per_token (lamports per token)
         let price_per_token = self
             .base_price
             .checked_mul(multiplier)
@@ -205,18 +208,20 @@ impl XToken {
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
         price_per_token
-            .checked_mul(quantity)
-            .ok_or(ProgramError::ArithmeticOverflow.into())
+            .checked_mul(quantity_base_units)
+            .ok_or(ProgramError::ArithmeticOverflow)?
+            .checked_div(1_000_000_000)
+            .ok_or(ProgramError::ArithmeticOverflow)
     }
 
-    /// Logarithmic pricing: price = base_price * log(1 + slope * supply)
+    /// Logarithmic pricing (simplified): price_per_token = base_price * log_factor
     fn calculate_logarithmic_price(
         &self,
         start_supply: u64,
         end_supply: u64,
     ) -> Result<u64, ProgramError> {
         // Simplified logarithmic calculation for demonstration
-        let quantity = end_supply
+        let quantity_base_units = end_supply
             .checked_sub(start_supply)
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
@@ -231,6 +236,7 @@ impl XToken {
             .checked_add(avg_supply.checked_div(1000).unwrap_or(0))
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
+        // price_per_token (lamports per token)
         let price_per_token = self
             .base_price
             .checked_mul(log_factor)
@@ -239,8 +245,10 @@ impl XToken {
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
         price_per_token
-            .checked_mul(quantity)
-            .ok_or(ProgramError::ArithmeticOverflow.into())
+            .checked_mul(quantity_base_units)
+            .ok_or(ProgramError::ArithmeticOverflow)?
+            .checked_div(1_000_000_000)
+            .ok_or(ProgramError::ArithmeticOverflow)
     }
 
     /// Calculate fees
