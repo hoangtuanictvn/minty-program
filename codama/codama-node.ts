@@ -17,7 +17,7 @@ import {
 export const root = rootNode(
     programNode({
         name: 'x_token',
-        publicKey: 'C8XnGp4h3v7Hi1Tun4zD4bh6S5xpSUyp9HxEHtKNBcRB',
+        publicKey: '84voapsHXtd4bwVMgr8GBnhVKXf5JQcBuGXRPRtFDLt1',
         version: '1.0.0',
         instructions: [
             instructionNode({
@@ -50,9 +50,9 @@ export const root = rootNode(
                         docs: ['Fees in basis points (100 = 1%)'],
                     }),
                     instructionArgumentNode({
-                        name: '_padding',
-                        type: numberTypeNode('u32'),
-                        docs: ['Padding for alignment'],
+                        name: 'owner',
+                        type: arrayTypeNode(numberTypeNode('u8'), fixedCountNode(32)),
+                        docs: ['Owner username (max 32 bytes) - includes length in first byte'],
                     }),
                     instructionArgumentNode({
                         name: 'basePrice',

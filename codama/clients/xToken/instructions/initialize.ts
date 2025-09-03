@@ -10,12 +10,12 @@ import {
   combineCodec,
   getAddressDecoder,
   getAddressEncoder,
+  getArrayDecoder,
+  getArrayEncoder,
   getStructDecoder,
   getStructEncoder,
   getU16Decoder,
   getU16Encoder,
-  getU32Decoder,
-  getU32Encoder,
   getU64Decoder,
   getU64Encoder,
   getU8Decoder,
@@ -103,8 +103,8 @@ export type InitializeInstructionData = {
   curveType: number;
   /** Fees in basis points (100 = 1%) */
   feeBasisPoints: number;
-  /** Padding for alignment */
-  padding: number;
+  /** Owner username (max 32 bytes) - includes length in first byte */
+  owner: Array<number>;
   /** Base price in lamports per token (scaled by 1e9) */
   basePrice: bigint;
   /** Slope parameter for pricing curve (scaled by 1e9) */
@@ -122,8 +122,8 @@ export type InitializeInstructionDataArgs = {
   curveType: number;
   /** Fees in basis points (100 = 1%) */
   feeBasisPoints: number;
-  /** Padding for alignment */
-  padding: number;
+  /** Owner username (max 32 bytes) - includes length in first byte */
+  owner: Array<number>;
   /** Base price in lamports per token (scaled by 1e9) */
   basePrice: number | bigint;
   /** Slope parameter for pricing curve (scaled by 1e9) */
@@ -141,7 +141,7 @@ export function getInitializeInstructionDataEncoder(): FixedSizeEncoder<Initiali
       ['decimals', getU8Encoder()],
       ['curveType', getU8Encoder()],
       ['feeBasisPoints', getU16Encoder()],
-      ['padding', getU32Encoder()],
+      ['owner', getArrayEncoder(getU8Encoder(), { size: 32 })],
       ['basePrice', getU64Encoder()],
       ['slope', getU64Encoder()],
       ['maxSupply', getU64Encoder()],
@@ -157,7 +157,7 @@ export function getInitializeInstructionDataDecoder(): FixedSizeDecoder<Initiali
     ['decimals', getU8Decoder()],
     ['curveType', getU8Decoder()],
     ['feeBasisPoints', getU16Decoder()],
-    ['padding', getU32Decoder()],
+    ['owner', getArrayDecoder(getU8Decoder(), { size: 32 })],
     ['basePrice', getU64Decoder()],
     ['slope', getU64Decoder()],
     ['maxSupply', getU64Decoder()],
@@ -204,7 +204,7 @@ export type InitializeInput<
   decimals: InitializeInstructionDataArgs['decimals'];
   curveType: InitializeInstructionDataArgs['curveType'];
   feeBasisPoints: InitializeInstructionDataArgs['feeBasisPoints'];
-  padding: InitializeInstructionDataArgs['padding'];
+  owner: InitializeInstructionDataArgs['owner'];
   basePrice: InitializeInstructionDataArgs['basePrice'];
   slope: InitializeInstructionDataArgs['slope'];
   maxSupply: InitializeInstructionDataArgs['maxSupply'];

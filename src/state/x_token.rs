@@ -12,6 +12,8 @@ pub struct XToken {
     pub token_mint: Pubkey,
     /// Fee recipient
     pub fee_recipient: Pubkey,
+    /// Owner username (max 32 bytes) - includes length in first byte
+    pub owner: [u8; 32],
     /// SOL reserve (in lamports)
     pub sol_reserve: u64,
     /// Token reserve (in token units)
@@ -32,10 +34,8 @@ pub struct XToken {
     pub is_initialized: u8,
     /// Bump seed for PDA
     pub bump: u8,
-    /// Padding for alignment
-    pub _padding: [u8; 3],
     /// Reserved space for future use
-    pub reserved: [u8; 64],
+    pub reserved: [u8; 35],
 }
 
 impl AccountData for XToken {}
@@ -54,10 +54,16 @@ impl XToken {
         max_supply: u64,
         fee_basis_points: u16,
         fee_recipient: Pubkey,
+        owner: &str,
         bump: u8,
     ) -> Result<(), ProgramError> {
         if self.is_initialized != 0 {
             return Err(ProgramError::AccountAlreadyInitialized);
+        }
+
+        // Validate owner length (max 31 bytes for data + 1 byte for length)
+        if owner.len() > 31 {
+            return Err(ProgramError::InvalidArgument);
         }
 
         self.authority = authority;
@@ -73,9 +79,28 @@ impl XToken {
         self.fee_recipient = fee_recipient;
         self.is_initialized = 1; // true
         self.bump = bump;
-        self.reserved = [0; 64];
+        self.reserved = [0; 35];
+
+        // Store owner: first byte is length, rest is the string
+        self.owner = [0; 32];
+        self.owner[0] = owner.len() as u8;
+        if owner.len() > 0 {
+            self.owner[1..=owner.len()].copy_from_slice(owner.as_bytes());
+        }
 
         Ok(())
+    }
+
+    /// Get owner username as string
+    pub fn get_owner(&self) -> &str {
+        let len = self.owner[0] as usize;
+        if len > 31 {
+            return "";
+        }
+        if len == 0 {
+            return "";
+        }
+        core::str::from_utf8(&self.owner[1..=len]).unwrap_or("")
     }
 
     /// Calculate price for buying tokens

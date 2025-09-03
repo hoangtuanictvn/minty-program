@@ -61,8 +61,8 @@ pub struct InitializeInstructionData {
     pub curve_type: u8,
     /// Fees in basis points (100 = 1%)
     pub fee_basis_points: u16,
-    /// Padding for alignment
-    pub _padding: u32,
+    /// Owner username (max 32 bytes) - includes length in first byte
+    pub owner: [u8; 32],
     /// Base price in lamports per token (scaled by 1e9)
     pub base_price: u64,
     /// Slope parameter for pricing curve (scaled by 1e9)
@@ -226,6 +226,18 @@ impl<'info> Initialize<'info> {
         let mut bonding_curve_data = self.accounts.bonding_curve.try_borrow_mut_data()?;
         let bonding_curve = XToken::load_mut(&mut bonding_curve_data)?;
 
+        // Extract owner username from instruction data
+        let owner_len = self.instruction_data.owner[0] as usize;
+        if owner_len > 31 {
+            return Err(ProgramError::InvalidArgument);
+        }
+        let owner_str = if owner_len == 0 {
+            ""
+        } else {
+            core::str::from_utf8(&self.instruction_data.owner[1..=owner_len])
+                .map_err(|_| ProgramError::InvalidArgument)?
+        };
+
         bonding_curve.initialize(
             *self.accounts.authority.key(),
             *self.accounts.mint.key(),
@@ -235,6 +247,7 @@ impl<'info> Initialize<'info> {
             self.instruction_data.max_supply,
             self.instruction_data.fee_basis_points,
             self.instruction_data.fee_recipient,
+            owner_str,
             bump,
         )?;
 
