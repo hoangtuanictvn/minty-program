@@ -7,6 +7,7 @@
  */
 
 export * from './buyTokens';
+export * from './getLeaderboard';
 export * from './initialize';
 export * from './sellTokens';
 export * from './updateProfile';

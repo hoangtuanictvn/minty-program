@@ -14,6 +14,7 @@ import {
 } from '@solana/kit';
 import {
   type ParsedBuyTokensInstruction,
+  type ParsedGetLeaderboardInstruction,
   type ParsedInitializeInstruction,
   type ParsedSellTokensInstruction,
   type ParsedUpdateProfileInstruction,
@@ -27,6 +28,7 @@ export enum XTokenInstruction {
   BuyTokens,
   SellTokens,
   UpdateProfile,
+  GetLeaderboard,
 }
 
 export function identifyXTokenInstruction(
@@ -45,6 +47,9 @@ export function identifyXTokenInstruction(
   if (containsBytes(data, getU8Encoder().encode(3), 0)) {
     return XTokenInstruction.UpdateProfile;
   }
+  if (containsBytes(data, getU8Encoder().encode(4), 0)) {
+    return XTokenInstruction.GetLeaderboard;
+  }
   throw new Error(
     'The provided instruction could not be identified as a xToken instruction.',
   );
@@ -54,14 +59,17 @@ export type ParsedXTokenInstruction<
   TProgram extends string = '84voapsHXtd4bwVMgr8GBnhVKXf5JQcBuGXRPRtFDLt1',
 > =
   | ({
-    instructionType: XTokenInstruction.Initialize;
-  } & ParsedInitializeInstruction<TProgram>)
+      instructionType: XTokenInstruction.Initialize;
+    } & ParsedInitializeInstruction<TProgram>)
   | ({
-    instructionType: XTokenInstruction.BuyTokens;
-  } & ParsedBuyTokensInstruction<TProgram>)
+      instructionType: XTokenInstruction.BuyTokens;
+    } & ParsedBuyTokensInstruction<TProgram>)
   | ({
-    instructionType: XTokenInstruction.SellTokens;
-  } & ParsedSellTokensInstruction<TProgram>)
+      instructionType: XTokenInstruction.SellTokens;
+    } & ParsedSellTokensInstruction<TProgram>)
   | ({
-    instructionType: XTokenInstruction.UpdateProfile;
-  } & ParsedUpdateProfileInstruction<TProgram>);
+      instructionType: XTokenInstruction.UpdateProfile;
+    } & ParsedUpdateProfileInstruction<TProgram>)
+  | ({
+      instructionType: XTokenInstruction.GetLeaderboard;
+    } & ParsedGetLeaderboardInstruction<TProgram>);

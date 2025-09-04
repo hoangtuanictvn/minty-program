@@ -1,9 +1,10 @@
 use bytemuck::{Pod, Zeroable};
-use pinocchio::{account_info::AccountInfo, program_error::ProgramError};
+use pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey};
+use pinocchio::sysvars::{clock::Clock, Sysvar};
 
 use crate::{
     error::XTokenError,
-    state::{AccountData, XToken},
+    state::{AccountData, XToken, TradingStats},
 };
 
 /// Accounts for SellTokens instruction
@@ -20,6 +21,8 @@ pub struct SellTokensAccounts<'info> {
     pub treasury: &'info AccountInfo,
     /// Fee recipient account
     pub fee_recipient: &'info AccountInfo,
+    /// Seller's trading stats account
+    pub trading_stats: &'info AccountInfo,
     /// Token program
     pub token_program: &'info AccountInfo,
     /// System program
@@ -28,7 +31,7 @@ pub struct SellTokensAccounts<'info> {
 
 impl<'info> SellTokensAccounts<'info> {
     pub fn try_from(accounts: &'info [AccountInfo]) -> Result<Self, ProgramError> {
-        if accounts.len() < 8 {
+        if accounts.len() < 9 {
             return Err(ProgramError::NotEnoughAccountKeys);
         }
 
@@ -39,8 +42,9 @@ impl<'info> SellTokensAccounts<'info> {
             seller_token_account: &accounts[3],
             treasury: &accounts[4],
             fee_recipient: &accounts[5],
-            token_program: &accounts[6],
-            system_program: &accounts[7],
+            trading_stats: &accounts[6],
+            token_program: &accounts[7],
+            system_program: &accounts[8],
         })
     }
 }
@@ -163,6 +167,36 @@ impl<'info> SellTokens<'info> {
         let _bonding_curve_signer = pinocchio::instruction::Signer::from(&bc_seeds);
 
         // -------- Phase 2: CPI calls (no bonding_curve borrow held) --------
+        // Ensure trading stats PDA exists (create if missing)
+        if self.accounts.trading_stats.data_is_empty() {
+            let (expected_pda, bump) = pinocchio::pubkey::find_program_address(
+                &[crate::state::TradingStats::SEED_PREFIX, self.accounts.seller.key().as_ref()],
+                &crate::ID,
+            );
+            if expected_pda != *self.accounts.trading_stats.key() {
+                return Err(ProgramError::InvalidSeeds);
+            }
+
+            let tb = [bump];
+            let seeds = [
+                pinocchio::instruction::Seed::from(crate::state::TradingStats::SEED_PREFIX),
+                pinocchio::instruction::Seed::from(self.accounts.seller.key().as_ref()),
+                pinocchio::instruction::Seed::from(&tb),
+            ];
+            let signer = pinocchio::instruction::Signer::from(&seeds);
+
+            let space = crate::state::TradingStats::LEN as u64;
+            let lamports = pinocchio::sysvars::rent::Rent::get()?.minimum_balance(space as usize);
+
+            pinocchio_system::instructions::CreateAccount {
+                from: self.accounts.seller,
+                to: self.accounts.trading_stats,
+                space,
+                lamports,
+                owner: &crate::ID,
+            }
+            .invoke_signed(&[signer])?;
+        }
         // Burn tokens from seller
         pinocchio_token::instructions::Burn {
             mint: self.accounts.mint,
@@ -258,6 +292,24 @@ impl<'info> SellTokens<'info> {
             let mut bonding_curve_data = self.accounts.bonding_curve.try_borrow_mut_data()?;
             let bonding_curve = XToken::load_mut(&mut bonding_curve_data)?;
             bonding_curve.update_sell(self.instruction_data.token_amount, total_proceeds)?;
+        }
+
+        // Update trading stats (temporarily disable P&L accumulation)
+        {
+            let mut trading_stats_data = self.accounts.trading_stats.try_borrow_mut_data()?;
+            let trading_stats = TradingStats::load_mut(&mut trading_stats_data)?;
+            
+            // Initialize if not already initialized
+            if trading_stats.user_address == Pubkey::default() {
+                trading_stats.initialize(*self.accounts.seller.key())?;
+            }
+            
+            // Do not accumulate profit/loss for now
+            let profit_loss: i64 = 0;
+            
+            // Get current timestamp
+            let timestamp = Clock::get()?.unix_timestamp;
+            trading_stats.update_sell(total_proceeds, profit_loss, timestamp)?;
         }
 
         Ok(())

@@ -1,9 +1,10 @@
 use bytemuck::{Pod, Zeroable};
-use pinocchio::{account_info::AccountInfo, program_error::ProgramError};
+use pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey};
+use pinocchio::sysvars::{clock::Clock, Sysvar};
 
 use crate::{
     error::XTokenError,
-    state::{AccountData, XToken},
+    state::{AccountData, XToken, TradingStats},
 };
 
 /// Accounts for BuyTokens instruction
@@ -20,6 +21,8 @@ pub struct BuyTokensAccounts<'info> {
     pub treasury: &'info AccountInfo,
     /// Fee recipient account
     pub fee_recipient: &'info AccountInfo,
+    /// Buyer's trading stats account
+    pub trading_stats: &'info AccountInfo,
     /// System program
     pub system_program: &'info AccountInfo,
     /// Token program
@@ -30,7 +33,7 @@ pub struct BuyTokensAccounts<'info> {
 
 impl<'info> BuyTokensAccounts<'info> {
     pub fn try_from(accounts: &'info [AccountInfo]) -> Result<Self, ProgramError> {
-        if accounts.len() < 9 {
+        if accounts.len() < 10 {
             return Err(ProgramError::NotEnoughAccountKeys);
         }
 
@@ -41,9 +44,10 @@ impl<'info> BuyTokensAccounts<'info> {
             buyer_token_account: &accounts[3],
             treasury: &accounts[4],
             fee_recipient: &accounts[5],
-            system_program: &accounts[6],
-            token_program: &accounts[7],
-            associated_token_program: &accounts[8],
+            trading_stats: &accounts[6],
+            system_program: &accounts[7],
+            token_program: &accounts[8],
+            associated_token_program: &accounts[9],
         })
     }
 }
@@ -147,12 +151,12 @@ impl<'info> BuyTokens<'info> {
         }
 
         // Re-borrow immutably to compute price and fee with helper methods
-        let (total_cost, fee) = {
+        let (total_cost, fee, sol_reserve_snapshot) = {
             let bonding_curve_data = self.accounts.bonding_curve.try_borrow_data()?;
             let bonding_curve = XToken::load(&bonding_curve_data)?;
             let total_cost = bonding_curve.calculate_buy_price(self.instruction_data.token_amount)?;
             let fee = bonding_curve.calculate_fee(total_cost)?;
-            (total_cost, fee)
+            (total_cost, fee, bonding_curve.sol_reserve)
         }; // drop borrow before CPIs
 
         let total_with_fee = total_cost
@@ -162,6 +166,15 @@ impl<'info> BuyTokens<'info> {
         // Check slippage protection
         if total_with_fee > self.instruction_data.max_sol_amount {
             return Err(XTokenError::SlippageExceeded.into());
+        }
+
+        // Cap treasury to 84 SOL: sol_reserve + incoming (without fee) must not exceed cap
+        const SOL_CAP_LAMPORTS: u64 = 84_000_000_000; // 84 * 1e9
+        let new_reserve = sol_reserve_snapshot
+            .checked_add(total_cost)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        if new_reserve > SOL_CAP_LAMPORTS {
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Check buyer has enough SOL
@@ -179,6 +192,36 @@ impl<'info> BuyTokens<'info> {
         let signer = pinocchio::instruction::Signer::from(&seeds);
 
         // -------- Phase 2: CPI calls (no bonding_curve borrow held) --------
+        // Ensure trading stats PDA exists (create if missing)
+        if self.accounts.trading_stats.data_is_empty() {
+            let (expected_pda, bump) = pinocchio::pubkey::find_program_address(
+                &[crate::state::TradingStats::SEED_PREFIX, self.accounts.buyer.key().as_ref()],
+                &crate::ID,
+            );
+            if expected_pda != *self.accounts.trading_stats.key() {
+                return Err(ProgramError::InvalidSeeds);
+            }
+
+            let tb = [bump];
+            let seeds = [
+                pinocchio::instruction::Seed::from(crate::state::TradingStats::SEED_PREFIX),
+                pinocchio::instruction::Seed::from(self.accounts.buyer.key().as_ref()),
+                pinocchio::instruction::Seed::from(&tb),
+            ];
+            let signer = pinocchio::instruction::Signer::from(&seeds);
+
+            let space = crate::state::TradingStats::LEN as u64;
+            let lamports = pinocchio::sysvars::rent::Rent::get()?.minimum_balance(space as usize);
+
+            pinocchio_system::instructions::CreateAccount {
+                from: self.accounts.buyer,
+                to: self.accounts.trading_stats,
+                space,
+                lamports,
+                owner: &crate::ID,
+            }
+            .invoke_signed(&[signer])?;
+        }
         // Create buyer's token account if it doesn't exist
         if self.accounts.buyer_token_account.data_is_empty() {
             pinocchio_associated_token_account::instructions::Create {
@@ -224,6 +267,21 @@ impl<'info> BuyTokens<'info> {
             let mut bonding_curve_data = self.accounts.bonding_curve.try_borrow_mut_data()?;
             let bonding_curve = XToken::load_mut(&mut bonding_curve_data)?;
             bonding_curve.update_buy(self.instruction_data.token_amount, total_cost)?;
+        }
+
+        // Update trading stats
+        {
+            let mut trading_stats_data = self.accounts.trading_stats.try_borrow_mut_data()?;
+            let trading_stats = TradingStats::load_mut(&mut trading_stats_data)?;
+            
+            // Initialize if not already initialized
+            if trading_stats.user_address == Pubkey::default() {
+                trading_stats.initialize(*self.accounts.buyer.key())?;
+            }
+            
+            // Get current timestamp (you might want to pass this as instruction data)
+            let timestamp = Clock::get()?.unix_timestamp;
+            trading_stats.update_buy(total_cost, timestamp)?;
         }
 
         Ok(())

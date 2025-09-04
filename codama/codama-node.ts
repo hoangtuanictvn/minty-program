@@ -197,6 +197,12 @@ export const root = rootNode(
                         docs: ['Fee recipient account'],
                     }),
                     instructionAccountNode({
+                        name: 'tradingStats',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ["Buyer's trading stats account"],
+                    }),
+                    instructionAccountNode({
                         name: 'systemProgram',
                         defaultValue: publicKeyValueNode(
                             '11111111111111111111111111111111',
@@ -290,7 +296,12 @@ export const root = rootNode(
                         isWritable: true,
                         docs: ['Fee recipient account'],
                     }),
-
+                    instructionAccountNode({
+                        name: 'tradingStats',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ["Seller's trading stats account"],
+                    }),
                     instructionAccountNode({
                         name: 'tokenProgram',
                         defaultValue: publicKeyValueNode(
@@ -376,6 +387,36 @@ export const root = rootNode(
                         isWritable: false,
                         docs: ['System Program'],
                     }),
+                ],
+            }),
+            instructionNode({
+                name: 'getLeaderboard',
+                discriminators: [
+                    constantDiscriminatorNode(
+                        constantValueNode(numberTypeNode('u8'), numberValueNode(4))
+                    ),
+                ],
+                arguments: [
+                    instructionArgumentNode({
+                        name: 'discriminator',
+                        type: numberTypeNode('u8'),
+                        defaultValue: numberValueNode(4),
+                        defaultValueStrategy: 'omitted',
+                    }),
+                    instructionArgumentNode({
+                        name: 'limit',
+                        type: numberTypeNode('u8'),
+                        docs: ['Number of top traders to return (max 100)'],
+                    }),
+                    instructionArgumentNode({
+                        name: 'offset',
+                        type: numberTypeNode('u8'),
+                        docs: ['Offset for pagination'],
+                    }),
+                ],
+                accounts: [
+                    // No accounts needed for this instruction as it's read-only
+                    // The data will be returned via program logs or client-side account scanning
                 ],
             }),
         ],
