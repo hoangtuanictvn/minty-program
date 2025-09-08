@@ -125,8 +125,8 @@ impl<'info> Initialize<'info> {
             return Err(ProgramError::MissingRequiredSignature);
         }
 
-        // Validate curve parameters
-        if self.instruction_data.curve_type > 2 {
+        // Validate curve parameters (0=linear,1=exp,2=log,3=cpmm)
+        if self.instruction_data.curve_type > 3 {
             return Err(XTokenError::InvalidCurveParameters.into());
         }
 

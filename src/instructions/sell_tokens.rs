@@ -1,10 +1,10 @@
 use bytemuck::{Pod, Zeroable};
-use pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey};
 use pinocchio::sysvars::{clock::Clock, Sysvar};
+use pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey};
 
 use crate::{
     error::XTokenError,
-    state::{AccountData, XToken, TradingStats},
+    state::{AccountData, TradingStats, XToken},
 };
 
 /// Accounts for SellTokens instruction
@@ -138,13 +138,23 @@ impl<'info> SellTokens<'info> {
             }
 
             // Calculate price and fee using immutable snapshot
-            let total_proceeds = bonding_curve.calculate_sell_price(self.instruction_data.token_amount)?;
+            let total_proceeds =
+                bonding_curve.calculate_sell_price(self.instruction_data.token_amount)?;
             let fee = bonding_curve.calculate_fee(total_proceeds)?;
-            let net_proceeds = total_proceeds
-                .checked_sub(fee)
-                .ok_or(ProgramError::ArithmeticOverflow)?;
+            let net_proceeds = if fee > total_proceeds {
+                0
+            } else {
+                total_proceeds - fee
+            };
 
-            (bonding_curve.bump, bonding_curve.token_mint, bonding_curve.total_supply, total_proceeds, fee, net_proceeds)
+            (
+                bonding_curve.bump,
+                bonding_curve.token_mint,
+                bonding_curve.total_supply,
+                total_proceeds,
+                fee,
+                net_proceeds,
+            )
         }; // immutable borrow dropped here
 
         // Check slippage protection
@@ -170,7 +180,10 @@ impl<'info> SellTokens<'info> {
         // Ensure trading stats PDA exists (create if missing)
         if self.accounts.trading_stats.data_is_empty() {
             let (expected_pda, bump) = pinocchio::pubkey::find_program_address(
-                &[crate::state::TradingStats::SEED_PREFIX, self.accounts.seller.key().as_ref()],
+                &[
+                    crate::state::TradingStats::SEED_PREFIX,
+                    self.accounts.seller.key().as_ref(),
+                ],
                 &crate::ID,
             );
             if expected_pda != *self.accounts.trading_stats.key() {
@@ -206,13 +219,12 @@ impl<'info> SellTokens<'info> {
         }
         .invoke()?;
 
-
-
         // Transfer SOL from treasury to seller/fee
         // Support both treasury owner patterns:
         // - System Program owned PDA (space=0): use invoke_signed(SystemProgram::Transfer)
         // - Program owned account with data: mutate lamports directly
-        let is_system_owned_treasury = unsafe { *self.accounts.treasury.owner() == pinocchio_system::ID };
+        let is_system_owned_treasury =
+            unsafe { *self.accounts.treasury.owner() == pinocchio_system::ID };
         if is_system_owned_treasury {
             // System-owned treasury: signed transfers
             let (treasury_pda, treasury_bump) = pinocchio::pubkey::find_program_address(
@@ -298,15 +310,15 @@ impl<'info> SellTokens<'info> {
         {
             let mut trading_stats_data = self.accounts.trading_stats.try_borrow_mut_data()?;
             let trading_stats = TradingStats::load_mut(&mut trading_stats_data)?;
-            
+
             // Initialize if not already initialized
             if trading_stats.user_address == Pubkey::default() {
                 trading_stats.initialize(*self.accounts.seller.key())?;
             }
-            
+
             // Do not accumulate profit/loss for now
             let profit_loss: i64 = 0;
-            
+
             // Get current timestamp
             let timestamp = Clock::get()?.unix_timestamp;
             trading_stats.update_sell(total_proceeds, profit_loss, timestamp)?;

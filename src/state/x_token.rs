@@ -28,7 +28,7 @@ pub struct XToken {
     pub max_supply: u64,
     /// Fees in basis points (100 = 1%)
     pub fee_basis_points: u16,
-    /// Curve type (0 = linear, 1 = exponential, 2 = logarithmic)
+    /// Curve type (0 = linear, 3 = CPMM pump.fun-like)
     pub curve_type: u8,
     /// Whether the curve is initialized (0 = false, 1 = true)
     pub is_initialized: u8,
@@ -120,8 +120,7 @@ impl XToken {
 
         match self.curve_type {
             0 => self.calculate_linear_price(self.total_supply, new_supply),
-            1 => self.calculate_exponential_price(self.total_supply, new_supply),
-            2 => self.calculate_logarithmic_price(self.total_supply, new_supply),
+            3 => self.calculate_cpmm_buy(self.total_supply, new_supply),
             _ => Err(ProgramError::InvalidArgument),
         }
     }
@@ -143,8 +142,7 @@ impl XToken {
 
         match self.curve_type {
             0 => self.calculate_linear_price(new_supply, self.total_supply),
-            1 => self.calculate_exponential_price(new_supply, self.total_supply),
-            2 => self.calculate_logarithmic_price(new_supply, self.total_supply),
+            3 => self.calculate_cpmm_sell(self.total_supply, new_supply),
             _ => Err(ProgramError::InvalidArgument),
         }
     }
@@ -155,109 +153,166 @@ impl XToken {
         start_supply: u64,
         end_supply: u64,
     ) -> Result<u64, ProgramError> {
-        let avg_supply = start_supply
-            .checked_add(end_supply)
+        let avg_supply_u128 = (start_supply as u128)
+            .checked_add(end_supply as u128)
             .ok_or(ProgramError::ArithmeticOverflow)?
             .checked_div(2)
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
-        let price_per_token = self
-            .base_price
-            .checked_add(
-                self.slope
-                    .checked_mul(avg_supply)
-                    .ok_or(ProgramError::ArithmeticOverflow)?
-                    .checked_div(1_000_000_000)
+        let slope_term = (self.slope as u128)
+            .checked_mul(avg_supply_u128)
+            .ok_or(ProgramError::ArithmeticOverflow)?
+            .checked_div(1_000_000_000u128)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        let price_per_token_u128 = (self.base_price as u128)
+            .checked_add(slope_term)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+
+        let quantity_base_units_u128 = (end_supply as u128)
+            .checked_sub(start_supply as u128)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+
+        let total_u128 = price_per_token_u128
+            .checked_mul(quantity_base_units_u128)
+            .ok_or(ProgramError::ArithmeticOverflow)?
+            .checked_div(1_000_000_000u128)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        if total_u128 > u64::MAX as u128 {
+            return Err(ProgramError::ArithmeticOverflow);
+        }
+        Ok(total_u128 as u64)
+    }
+
+    fn calculate_cpmm_buy(&self, start_supply: u64, end_supply: u64) -> Result<u64, ProgramError> {
+        let x = end_supply
+            .checked_sub(start_supply)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+
+        let remaining_before = self
+            .max_supply
+            .checked_sub(start_supply)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        let remaining_after = remaining_before
+            .checked_sub(x)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+
+        let v_s = self.base_price as u128; // lamports
+        let v_t = self.slope as u128; // token base units
+
+        let s = self.sol_reserve as u128; // lamports
+        let r_before = remaining_before as u128; // tokens
+        let r_after = remaining_after as u128; // tokens
+
+        // K = (S + vS) * (R + vT)
+        let k = (s.checked_add(v_s).ok_or(ProgramError::ArithmeticOverflow)?)
+            .checked_mul(
+                r_before
+                    .checked_add(v_t)
                     .ok_or(ProgramError::ArithmeticOverflow)?,
             )
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
-        let quantity_base_units = end_supply
-            .checked_sub(start_supply)
+        // S' = K / (R' + vT) - vS
+        let denom = r_after
+            .checked_add(v_t)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        if denom == 0 {
+            return Err(ProgramError::InvalidArgument);
+        }
+        let k_div = k
+            .checked_div(denom)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        // If k_div < v_s, S' would be negative; clamp to zero receive to avoid underflow
+        if k_div <= v_s {
+            return Ok(0);
+        }
+        let s_prime = k_div
+            .checked_sub(v_s)
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
-        price_per_token
-            .checked_mul(quantity_base_units)
-            .ok_or(ProgramError::ArithmeticOverflow)?
-            .checked_div(1_000_000_000)
-            .ok_or(ProgramError::ArithmeticOverflow)
+        // cost = S' - S
+        let cost = s_prime
+            .checked_sub(s)
+            .ok_or(ProgramError::ArithmeticOverflow)? as u64;
+
+        Ok(cost)
     }
 
-    /// Exponential pricing (simplified): price_per_token = base_price * (1 + slope)
-    fn calculate_exponential_price(
-        &self,
-        start_supply: u64,
-        end_supply: u64,
-    ) -> Result<u64, ProgramError> {
-        // Simplified exponential calculation for demonstration
-        // In production, you'd want more sophisticated math
-        let quantity_base_units = end_supply
+    fn calculate_cpmm_sell(&self, start_supply: u64, end_supply: u64) -> Result<u64, ProgramError> {
+        // amount to sell in base units (x = start - end)
+        let x = start_supply
+            .checked_sub(end_supply)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+
+        // remaining tokens before/after
+        let remaining_before = self
+            .max_supply
             .checked_sub(start_supply)
             .ok_or(ProgramError::ArithmeticOverflow)?;
-
-        let multiplier = 1_000_000_000u64
-            .checked_add(self.slope)
+        let remaining_after = remaining_before
+            .checked_add(x)
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
-        // price_per_token (lamports per token)
-        let price_per_token = self
-            .base_price
-            .checked_mul(multiplier)
-            .ok_or(ProgramError::ArithmeticOverflow)?
-            .checked_div(1_000_000_000)
+        let v_s = self.base_price as u128; // lamports (virtual)
+        let v_t = self.slope as u128; // token base units (virtual)
+
+        let s = self.sol_reserve as u128; // lamports (real)
+        let r_before = remaining_before as u128; // tokens (real remaining before)
+        let r_after = remaining_after as u128; // tokens (real remaining after)
+
+        // K = (S + vS) * (R + vT)
+        let k = (s.checked_add(v_s).ok_or(ProgramError::ArithmeticOverflow)?)
+            .checked_mul(
+                r_before
+                    .checked_add(v_t)
+                    .ok_or(ProgramError::ArithmeticOverflow)?,
+            )
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
-        price_per_token
-            .checked_mul(quantity_base_units)
-            .ok_or(ProgramError::ArithmeticOverflow)?
-            .checked_div(1_000_000_000)
-            .ok_or(ProgramError::ArithmeticOverflow)
-    }
-
-    /// Logarithmic pricing (simplified): price_per_token = base_price * log_factor
-    fn calculate_logarithmic_price(
-        &self,
-        start_supply: u64,
-        end_supply: u64,
-    ) -> Result<u64, ProgramError> {
-        // Simplified logarithmic calculation for demonstration
-        let quantity_base_units = end_supply
-            .checked_sub(start_supply)
+        // S' = K / (R' + vT) - vS
+        let denom = r_after
+            .checked_add(v_t)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        if denom == 0 {
+            return Err(ProgramError::InvalidArgument);
+        }
+        let k_div = k
+            .checked_div(denom)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        if k_div <= v_s {
+            return Ok(0);
+        }
+        let s_prime = k_div
+            .checked_sub(v_s)
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
-        let avg_supply = start_supply
-            .checked_add(end_supply)
-            .ok_or(ProgramError::ArithmeticOverflow)?
-            .checked_div(2)
+        // receive = S - S' (ensure S' <= S to avoid underflow)
+        if s_prime > s {
+            return Ok(0);
+        }
+        let receive_u128 = s
+            .checked_sub(s_prime)
             .ok_or(ProgramError::ArithmeticOverflow)?;
-
-        // Simple approximation: log effect reduces price growth
-        let log_factor = 1_000_000_000u64
-            .checked_add(avg_supply.checked_div(1000).unwrap_or(0))
-            .ok_or(ProgramError::ArithmeticOverflow)?;
-
-        // price_per_token (lamports per token)
-        let price_per_token = self
-            .base_price
-            .checked_mul(log_factor)
-            .ok_or(ProgramError::ArithmeticOverflow)?
-            .checked_div(1_000_000_000)
-            .ok_or(ProgramError::ArithmeticOverflow)?;
-
-        price_per_token
-            .checked_mul(quantity_base_units)
-            .ok_or(ProgramError::ArithmeticOverflow)?
-            .checked_div(1_000_000_000)
-            .ok_or(ProgramError::ArithmeticOverflow)
+        if receive_u128 > u64::MAX as u128 {
+            return Err(ProgramError::ArithmeticOverflow);
+        }
+        Ok(receive_u128 as u64)
     }
 
     /// Calculate fees
     pub fn calculate_fee(&self, amount: u64) -> Result<u64, ProgramError> {
-        amount
-            .checked_mul(self.fee_basis_points as u64)
+        // Use wider arithmetic to avoid intermediate overflow
+        let amount_u128 = amount as u128;
+        let bps_u128 = self.fee_basis_points as u128;
+        let fee_u128 = amount_u128
+            .checked_mul(bps_u128)
             .ok_or(ProgramError::ArithmeticOverflow)?
-            .checked_div(10_000)
-            .ok_or(ProgramError::ArithmeticOverflow.into())
+            .checked_div(10_000u128)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        if fee_u128 > u64::MAX as u128 {
+            return Err(ProgramError::ArithmeticOverflow);
+        }
+        Ok(fee_u128 as u64)
     }
 
     /// Update reserves after buy
