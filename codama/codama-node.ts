@@ -17,7 +17,7 @@ import {
 export const root = rootNode(
     programNode({
         name: 'x_token',
-        publicKey: 'J8w2zNwda9XgDWXiMYLA5RL4pLFHEsjuYeXGLgayavLy',
+        publicKey: 'C14PX8VvXDvMpthtUMHiwhmrqyW91sNXJq8bRGSTKFS5',
         version: '1.0.0',
         instructions: [
             instructionNode({
@@ -74,6 +74,16 @@ export const root = rootNode(
                         type: publicKeyTypeNode(),
                         docs: ['Fee recipient address'],
                     }),
+                    instructionArgumentNode({
+                        name: 'initialBuyAmount',
+                        type: numberTypeNode('u64'),
+                        docs: ['Initial pre-buy token amount in base units (optional, 0 to skip)'],
+                    }),
+                    instructionArgumentNode({
+                        name: 'initialMaxSol',
+                        type: numberTypeNode('u64'),
+                        docs: ['Max SOL (lamports) willing to pay for initial pre-buy'],
+                    }),
                 ],
                 accounts: [
                     instructionAccountNode({
@@ -99,6 +109,12 @@ export const root = rootNode(
                         isSigner: false,
                         isWritable: true,
                         docs: ['Treasury account (holds SOL for bonding curve)'],
+                    }),
+                    instructionAccountNode({
+                        name: 'authorityTokenAccount',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ["Authority's token account (ATA) to receive initial pre-buy tokens"],
                     }),
                     instructionAccountNode({
                         name: 'payer',
@@ -127,10 +143,26 @@ export const root = rootNode(
                         docs: ['Token Program'],
                     }),
                     instructionAccountNode({
+                        name: 'associatedTokenProgram',
+                        defaultValue: publicKeyValueNode(
+                            'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
+                            'associatedTokenProgram'
+                        ),
+                        isSigner: false,
+                        isWritable: false,
+                        docs: ['Associated Token Program'],
+                    }),
+                    instructionAccountNode({
                         name: 'rent',
                         isSigner: false,
                         isWritable: false,
                         docs: ['Rent sysvar'],
+                    }),
+                    instructionAccountNode({
+                        name: 'feeRecipientAccount',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ['Fee recipient account (for initial pre-buy fee transfer)'],
                     }),
                 ],
             }),

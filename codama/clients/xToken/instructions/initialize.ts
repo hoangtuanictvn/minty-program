@@ -52,6 +52,7 @@ export type InitializeInstruction<
   TAccountBondingCurve extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountTreasury extends string | AccountMeta<string> = string,
+  TAccountAuthorityTokenAccount extends string | AccountMeta<string> = string,
   TAccountPayer extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends
     | string
@@ -59,7 +60,11 @@ export type InitializeInstruction<
   TAccountTokenProgram extends
     | string
     | AccountMeta<string> = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+  TAccountAssociatedTokenProgram extends
+    | string
+    | AccountMeta<string> = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
   TAccountRent extends string | AccountMeta<string> = string,
+  TAccountFeeRecipientAccount extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -78,6 +83,9 @@ export type InitializeInstruction<
       TAccountTreasury extends string
         ? WritableAccount<TAccountTreasury>
         : TAccountTreasury,
+      TAccountAuthorityTokenAccount extends string
+        ? WritableAccount<TAccountAuthorityTokenAccount>
+        : TAccountAuthorityTokenAccount,
       TAccountPayer extends string
         ? WritableSignerAccount<TAccountPayer> &
             AccountSignerMeta<TAccountPayer>
@@ -88,9 +96,15 @@ export type InitializeInstruction<
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
+      TAccountAssociatedTokenProgram extends string
+        ? ReadonlyAccount<TAccountAssociatedTokenProgram>
+        : TAccountAssociatedTokenProgram,
       TAccountRent extends string
         ? ReadonlyAccount<TAccountRent>
         : TAccountRent,
+      TAccountFeeRecipientAccount extends string
+        ? WritableAccount<TAccountFeeRecipientAccount>
+        : TAccountFeeRecipientAccount,
       ...TRemainingAccounts,
     ]
   >;
@@ -113,6 +127,10 @@ export type InitializeInstructionData = {
   maxSupply: bigint;
   /** Fee recipient address */
   feeRecipient: Address;
+  /** Initial pre-buy token amount in base units (optional, 0 to skip) */
+  initialBuyAmount: bigint;
+  /** Max SOL (lamports) willing to pay for initial pre-buy */
+  initialMaxSol: bigint;
 };
 
 export type InitializeInstructionDataArgs = {
@@ -132,6 +150,10 @@ export type InitializeInstructionDataArgs = {
   maxSupply: number | bigint;
   /** Fee recipient address */
   feeRecipient: Address;
+  /** Initial pre-buy token amount in base units (optional, 0 to skip) */
+  initialBuyAmount: number | bigint;
+  /** Max SOL (lamports) willing to pay for initial pre-buy */
+  initialMaxSol: number | bigint;
 };
 
 export function getInitializeInstructionDataEncoder(): FixedSizeEncoder<InitializeInstructionDataArgs> {
@@ -146,6 +168,8 @@ export function getInitializeInstructionDataEncoder(): FixedSizeEncoder<Initiali
       ['slope', getU64Encoder()],
       ['maxSupply', getU64Encoder()],
       ['feeRecipient', getAddressEncoder()],
+      ['initialBuyAmount', getU64Encoder()],
+      ['initialMaxSol', getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: 0 }),
   );
@@ -162,6 +186,8 @@ export function getInitializeInstructionDataDecoder(): FixedSizeDecoder<Initiali
     ['slope', getU64Decoder()],
     ['maxSupply', getU64Decoder()],
     ['feeRecipient', getAddressDecoder()],
+    ['initialBuyAmount', getU64Decoder()],
+    ['initialMaxSol', getU64Decoder()],
   ]);
 }
 
@@ -180,10 +206,13 @@ export type InitializeInput<
   TAccountBondingCurve extends string = string,
   TAccountMint extends string = string,
   TAccountTreasury extends string = string,
+  TAccountAuthorityTokenAccount extends string = string,
   TAccountPayer extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountTokenProgram extends string = string,
+  TAccountAssociatedTokenProgram extends string = string,
   TAccountRent extends string = string,
+  TAccountFeeRecipientAccount extends string = string,
 > = {
   /** Authority that will control the bonding curve */
   authority: TransactionSigner<TAccountAuthority>;
@@ -193,14 +222,20 @@ export type InitializeInput<
   mint: Address<TAccountMint>;
   /** Treasury account (holds SOL for bonding curve) */
   treasury: Address<TAccountTreasury>;
+  /** Authority's token account (ATA) to receive initial pre-buy tokens */
+  authorityTokenAccount: Address<TAccountAuthorityTokenAccount>;
   /** Payer for account creation and rent */
   payer: TransactionSigner<TAccountPayer>;
   /** System Program */
   systemProgram?: Address<TAccountSystemProgram>;
   /** Token Program */
   tokenProgram?: Address<TAccountTokenProgram>;
+  /** Associated Token Program */
+  associatedTokenProgram?: Address<TAccountAssociatedTokenProgram>;
   /** Rent sysvar */
   rent: Address<TAccountRent>;
+  /** Fee recipient account (for initial pre-buy fee transfer) */
+  feeRecipientAccount: Address<TAccountFeeRecipientAccount>;
   decimals: InitializeInstructionDataArgs['decimals'];
   curveType: InitializeInstructionDataArgs['curveType'];
   feeBasisPoints: InitializeInstructionDataArgs['feeBasisPoints'];
@@ -209,6 +244,8 @@ export type InitializeInput<
   slope: InitializeInstructionDataArgs['slope'];
   maxSupply: InitializeInstructionDataArgs['maxSupply'];
   feeRecipient: InitializeInstructionDataArgs['feeRecipient'];
+  initialBuyAmount: InitializeInstructionDataArgs['initialBuyAmount'];
+  initialMaxSol: InitializeInstructionDataArgs['initialMaxSol'];
 };
 
 export function getInitializeInstruction<
@@ -216,10 +253,13 @@ export function getInitializeInstruction<
   TAccountBondingCurve extends string,
   TAccountMint extends string,
   TAccountTreasury extends string,
+  TAccountAuthorityTokenAccount extends string,
   TAccountPayer extends string,
   TAccountSystemProgram extends string,
   TAccountTokenProgram extends string,
+  TAccountAssociatedTokenProgram extends string,
   TAccountRent extends string,
+  TAccountFeeRecipientAccount extends string,
   TProgramAddress extends Address = typeof X_TOKEN_PROGRAM_ADDRESS,
 >(
   input: InitializeInput<
@@ -227,10 +267,13 @@ export function getInitializeInstruction<
     TAccountBondingCurve,
     TAccountMint,
     TAccountTreasury,
+    TAccountAuthorityTokenAccount,
     TAccountPayer,
     TAccountSystemProgram,
     TAccountTokenProgram,
-    TAccountRent
+    TAccountAssociatedTokenProgram,
+    TAccountRent,
+    TAccountFeeRecipientAccount
   >,
   config?: { programAddress?: TProgramAddress },
 ): InitializeInstruction<
@@ -239,10 +282,13 @@ export function getInitializeInstruction<
   TAccountBondingCurve,
   TAccountMint,
   TAccountTreasury,
+  TAccountAuthorityTokenAccount,
   TAccountPayer,
   TAccountSystemProgram,
   TAccountTokenProgram,
-  TAccountRent
+  TAccountAssociatedTokenProgram,
+  TAccountRent,
+  TAccountFeeRecipientAccount
 > {
   // Program address.
   const programAddress = config?.programAddress ?? X_TOKEN_PROGRAM_ADDRESS;
@@ -253,10 +299,22 @@ export function getInitializeInstruction<
     bondingCurve: { value: input.bondingCurve ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: true },
     treasury: { value: input.treasury ?? null, isWritable: true },
+    authorityTokenAccount: {
+      value: input.authorityTokenAccount ?? null,
+      isWritable: true,
+    },
     payer: { value: input.payer ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
+    associatedTokenProgram: {
+      value: input.associatedTokenProgram ?? null,
+      isWritable: false,
+    },
     rent: { value: input.rent ?? null, isWritable: false },
+    feeRecipientAccount: {
+      value: input.feeRecipientAccount ?? null,
+      isWritable: true,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -275,6 +333,10 @@ export function getInitializeInstruction<
     accounts.tokenProgram.value =
       'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' as Address<'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'>;
   }
+  if (!accounts.associatedTokenProgram.value) {
+    accounts.associatedTokenProgram.value =
+      'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL' as Address<'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'>;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
   const instruction = {
@@ -283,10 +345,13 @@ export function getInitializeInstruction<
       getAccountMeta(accounts.bondingCurve),
       getAccountMeta(accounts.mint),
       getAccountMeta(accounts.treasury),
+      getAccountMeta(accounts.authorityTokenAccount),
       getAccountMeta(accounts.payer),
       getAccountMeta(accounts.systemProgram),
       getAccountMeta(accounts.tokenProgram),
+      getAccountMeta(accounts.associatedTokenProgram),
       getAccountMeta(accounts.rent),
+      getAccountMeta(accounts.feeRecipientAccount),
     ],
     programAddress,
     data: getInitializeInstructionDataEncoder().encode(
@@ -298,10 +363,13 @@ export function getInitializeInstruction<
     TAccountBondingCurve,
     TAccountMint,
     TAccountTreasury,
+    TAccountAuthorityTokenAccount,
     TAccountPayer,
     TAccountSystemProgram,
     TAccountTokenProgram,
-    TAccountRent
+    TAccountAssociatedTokenProgram,
+    TAccountRent,
+    TAccountFeeRecipientAccount
   >;
 
   return instruction;
@@ -321,14 +389,20 @@ export type ParsedInitializeInstruction<
     mint: TAccountMetas[2];
     /** Treasury account (holds SOL for bonding curve) */
     treasury: TAccountMetas[3];
+    /** Authority's token account (ATA) to receive initial pre-buy tokens */
+    authorityTokenAccount: TAccountMetas[4];
     /** Payer for account creation and rent */
-    payer: TAccountMetas[4];
+    payer: TAccountMetas[5];
     /** System Program */
-    systemProgram: TAccountMetas[5];
+    systemProgram: TAccountMetas[6];
     /** Token Program */
-    tokenProgram: TAccountMetas[6];
+    tokenProgram: TAccountMetas[7];
+    /** Associated Token Program */
+    associatedTokenProgram: TAccountMetas[8];
     /** Rent sysvar */
-    rent: TAccountMetas[7];
+    rent: TAccountMetas[9];
+    /** Fee recipient account (for initial pre-buy fee transfer) */
+    feeRecipientAccount: TAccountMetas[10];
   };
   data: InitializeInstructionData;
 };
@@ -341,7 +415,7 @@ export function parseInitializeInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedInitializeInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 8) {
+  if (instruction.accounts.length < 11) {
     // TODO: Coded error.
     throw new Error('Not enough accounts');
   }
@@ -358,10 +432,13 @@ export function parseInitializeInstruction<
       bondingCurve: getNextAccount(),
       mint: getNextAccount(),
       treasury: getNextAccount(),
+      authorityTokenAccount: getNextAccount(),
       payer: getNextAccount(),
       systemProgram: getNextAccount(),
       tokenProgram: getNextAccount(),
+      associatedTokenProgram: getNextAccount(),
       rent: getNextAccount(),
+      feeRecipientAccount: getNextAccount(),
     },
     data: getInitializeInstructionDataDecoder().decode(instruction.data),
   };

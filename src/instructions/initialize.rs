@@ -22,19 +22,25 @@ pub struct InitializeAccounts<'info> {
     pub mint: &'info AccountInfo,
     /// Treasury account (PDA) - holds SOL for bonding curve
     pub treasury: &'info AccountInfo,
+    /// Authority's token account (ATA) to receive pre-buy tokens
+    pub authority_token_account: &'info AccountInfo,
     /// Payer for account creation
     pub payer: &'info AccountInfo,
     /// System program
     pub system_program: &'info AccountInfo,
     /// Token program
     pub token_program: &'info AccountInfo,
+    /// Associated token program
+    pub associated_token_program: &'info AccountInfo,
     /// Rent sysvar
     pub rent: &'info AccountInfo,
+    /// Fee recipient account (for transferring initial fee)
+    pub fee_recipient_account: &'info AccountInfo,
 }
 
 impl<'info> InitializeAccounts<'info> {
     pub fn try_from(accounts: &'info [AccountInfo]) -> Result<Self, ProgramError> {
-        if accounts.len() < 8 {
+        if accounts.len() < 11 {
             return Err(ProgramError::NotEnoughAccountKeys);
         }
 
@@ -43,10 +49,13 @@ impl<'info> InitializeAccounts<'info> {
             bonding_curve: &accounts[1],
             mint: &accounts[2],
             treasury: &accounts[3],
-            payer: &accounts[4],
-            system_program: &accounts[5],
-            token_program: &accounts[6],
-            rent: &accounts[7],
+            authority_token_account: &accounts[4],
+            payer: &accounts[5],
+            system_program: &accounts[6],
+            token_program: &accounts[7],
+            associated_token_program: &accounts[8],
+            rent: &accounts[9],
+            fee_recipient_account: &accounts[10],
         })
     }
 }
@@ -71,6 +80,10 @@ pub struct InitializeInstructionData {
     pub max_supply: u64,
     /// Fee recipient
     pub fee_recipient: Pubkey,
+    /// Optional initial pre-buy token amount (base units)
+    pub initial_buy_amount: u64,
+    /// Max SOL willing to pay for initial buy (slippage protection)
+    pub initial_max_sol: u64,
 }
 
 impl InitializeInstructionData {
@@ -250,6 +263,103 @@ impl<'info> Initialize<'info> {
             owner_str,
             bump,
         )?;
+
+        // Optional: perform initial pre-buy similar to pump.fun
+        if self.instruction_data.initial_buy_amount > 0 {
+            // Drop mutable borrow of bonding_curve before re-borrowing
+            drop(bonding_curve_data);
+
+            // Compute cost and fee from fresh immutable snapshot
+            let (total_cost, fee) = {
+                let bonding_curve_data = self.accounts.bonding_curve.try_borrow_data()?;
+                let bonding_curve_ro = XToken::load(&bonding_curve_data)?;
+                let total_cost = bonding_curve_ro.calculate_buy_price(self.instruction_data.initial_buy_amount)?;
+                let fee = bonding_curve_ro.calculate_fee(total_cost)?;
+                (total_cost, fee)
+            };
+
+            let total_with_fee = total_cost
+                .checked_add(fee)
+                .ok_or(ProgramError::ArithmeticOverflow)?;
+
+            // Slippage check
+            if total_with_fee > self.instruction_data.initial_max_sol {
+                return Err(XTokenError::SlippageExceeded.into());
+            }
+
+            // Treasury cap like in buy (84 SOL)
+            const SOL_CAP_LAMPORTS: u64 = 84_000_000_000;
+            let sol_reserve_snapshot = {
+                let bonding_curve_data = self.accounts.bonding_curve.try_borrow_data()?;
+                let bonding_curve_ro = XToken::load(&bonding_curve_data)?;
+                bonding_curve_ro.sol_reserve
+            };
+            let new_reserve = sol_reserve_snapshot
+                .checked_add(total_cost)
+                .ok_or(ProgramError::ArithmeticOverflow)?;
+            if new_reserve > SOL_CAP_LAMPORTS {
+                return Err(ProgramError::InvalidArgument);
+            }
+
+            // Ensure payer has enough SOL
+            if self.accounts.payer.lamports() < total_with_fee {
+                return Err(XTokenError::InsufficientFunds.into());
+            }
+
+            // Derive signer seeds for bonding curve
+            let bump_bytes = [bump];
+            let seeds = [
+                Seed::from(XToken::SEED_PREFIX),
+                Seed::from(self.accounts.mint.key().as_ref()),
+                Seed::from(&bump_bytes),
+            ];
+            let signer = Signer::from(&seeds);
+
+            // Ensure ATA exists
+            if self.accounts.authority_token_account.data_is_empty() {
+                pinocchio_associated_token_account::instructions::Create {
+                    account: self.accounts.authority_token_account,
+                    mint: self.accounts.mint,
+                    funding_account: self.accounts.payer,
+                    system_program: self.accounts.system_program,
+                    token_program: self.accounts.token_program,
+                    wallet: self.accounts.authority,
+                }
+                .invoke()?;
+            }
+
+            // Transfer SOL to treasury and fee recipient from payer
+            pinocchio_system::instructions::Transfer {
+                from: self.accounts.payer,
+                to: self.accounts.treasury,
+                lamports: total_cost,
+            }
+            .invoke()?;
+            if fee > 0 {
+                pinocchio_system::instructions::Transfer {
+                    from: self.accounts.payer,
+                    to: self.accounts.fee_recipient_account,
+                    lamports: fee,
+                }
+                .invoke()?;
+            }
+
+            // Mint tokens to authority
+            pinocchio_token::instructions::MintTo {
+                mint: self.accounts.mint,
+                account: self.accounts.authority_token_account,
+                mint_authority: self.accounts.bonding_curve,
+                amount: self.instruction_data.initial_buy_amount,
+            }
+            .invoke_signed(&[signer])?;
+
+            // Update state
+            {
+                let mut bonding_curve_data = self.accounts.bonding_curve.try_borrow_mut_data()?;
+                let bonding_curve = XToken::load_mut(&mut bonding_curve_data)?;
+                bonding_curve.update_buy(self.instruction_data.initial_buy_amount, total_cost)?;
+            }
+        }
 
         Ok(())
     }
