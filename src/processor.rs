@@ -19,15 +19,37 @@ pub fn process_instruction(
         return Err(ProgramError::IncorrectProgramId);
     }
 
+    // Quick validation to help debug InvalidInstructionData without dynamic logs
+    // Expect first byte discriminator + fixed-size data for Initialize
+    if instruction_data.is_empty() {
+        log!("empty_instruction_data");
+        return Err(ProgramError::InvalidInstructionData);
+    }
+    // accounts length validated inside instruction parser
+
     // Extract instruction discriminator
     let (discriminator, data) = instruction_data
         .split_first()
         .ok_or(ProgramError::InvalidInstructionData)?;
 
+    // Validate discriminator for Initialize (0)
+    if *discriminator == 0 {
+        // ok
+    } else {
+        log!("disc_not_zero");
+    }
+
     // Route to appropriate instruction handler
     match Instruction::try_from(*discriminator)? {
         Instruction::Initialize => {
-            log!("Instruction: Initialize");
+            log!("INIT_MARKER_V2");
+            // Validate data size against Rust struct length
+            if data.len() == crate::instructions::initialize::InitializeInstructionData::LEN {
+                log!("initialize_data_len_ok");
+            } else {
+                log!("initialize_data_len_mismatch");
+                return Err(ProgramError::InvalidInstructionData);
+            }
             let mut initialize = Initialize::try_from((accounts, data))?;
             initialize.handler()
         }

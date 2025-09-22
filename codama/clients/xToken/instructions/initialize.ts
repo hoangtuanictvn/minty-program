@@ -65,6 +65,10 @@ export type InitializeInstruction<
     | AccountMeta<string> = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
   TAccountRent extends string | AccountMeta<string> = string,
   TAccountFeeRecipientAccount extends string | AccountMeta<string> = string,
+  TAccountMetadataAccount extends string | AccountMeta<string> = string,
+  TAccountMetaplexProgram extends
+    | string
+    | AccountMeta<string> = 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s',
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -105,6 +109,12 @@ export type InitializeInstruction<
       TAccountFeeRecipientAccount extends string
         ? WritableAccount<TAccountFeeRecipientAccount>
         : TAccountFeeRecipientAccount,
+      TAccountMetadataAccount extends string
+        ? WritableAccount<TAccountMetadataAccount>
+        : TAccountMetadataAccount,
+      TAccountMetaplexProgram extends string
+        ? ReadonlyAccount<TAccountMetaplexProgram>
+        : TAccountMetaplexProgram,
       ...TRemainingAccounts,
     ]
   >;
@@ -131,6 +141,12 @@ export type InitializeInstructionData = {
   initialBuyAmount: bigint;
   /** Max SOL (lamports) willing to pay for initial pre-buy */
   initialMaxSol: bigint;
+  /** Token name (max 32 bytes) - includes length in first byte */
+  tokenName: Array<number>;
+  /** Token symbol (max 10 bytes) - includes length in first byte */
+  tokenSymbol: Array<number>;
+  /** Token metadata URI (max 200 bytes) - includes length in first byte */
+  tokenUri: Array<number>;
 };
 
 export type InitializeInstructionDataArgs = {
@@ -154,6 +170,12 @@ export type InitializeInstructionDataArgs = {
   initialBuyAmount: number | bigint;
   /** Max SOL (lamports) willing to pay for initial pre-buy */
   initialMaxSol: number | bigint;
+  /** Token name (max 32 bytes) - includes length in first byte */
+  tokenName: Array<number>;
+  /** Token symbol (max 10 bytes) - includes length in first byte */
+  tokenSymbol: Array<number>;
+  /** Token metadata URI (max 200 bytes) - includes length in first byte */
+  tokenUri: Array<number>;
 };
 
 export function getInitializeInstructionDataEncoder(): FixedSizeEncoder<InitializeInstructionDataArgs> {
@@ -170,6 +192,9 @@ export function getInitializeInstructionDataEncoder(): FixedSizeEncoder<Initiali
       ['feeRecipient', getAddressEncoder()],
       ['initialBuyAmount', getU64Encoder()],
       ['initialMaxSol', getU64Encoder()],
+      ['tokenName', getArrayEncoder(getU8Encoder(), { size: 32 })],
+      ['tokenSymbol', getArrayEncoder(getU8Encoder(), { size: 10 })],
+      ['tokenUri', getArrayEncoder(getU8Encoder(), { size: 200 })],
     ]),
     (value) => ({ ...value, discriminator: 0 }),
   );
@@ -188,6 +213,9 @@ export function getInitializeInstructionDataDecoder(): FixedSizeDecoder<Initiali
     ['feeRecipient', getAddressDecoder()],
     ['initialBuyAmount', getU64Decoder()],
     ['initialMaxSol', getU64Decoder()],
+    ['tokenName', getArrayDecoder(getU8Decoder(), { size: 32 })],
+    ['tokenSymbol', getArrayDecoder(getU8Decoder(), { size: 10 })],
+    ['tokenUri', getArrayDecoder(getU8Decoder(), { size: 200 })],
   ]);
 }
 
@@ -213,6 +241,8 @@ export type InitializeInput<
   TAccountAssociatedTokenProgram extends string = string,
   TAccountRent extends string = string,
   TAccountFeeRecipientAccount extends string = string,
+  TAccountMetadataAccount extends string = string,
+  TAccountMetaplexProgram extends string = string,
 > = {
   /** Authority that will control the bonding curve */
   authority: TransactionSigner<TAccountAuthority>;
@@ -236,6 +266,10 @@ export type InitializeInput<
   rent: Address<TAccountRent>;
   /** Fee recipient account (for initial pre-buy fee transfer) */
   feeRecipientAccount: Address<TAccountFeeRecipientAccount>;
+  /** Metadata account (PDA from Metaplex) */
+  metadataAccount: Address<TAccountMetadataAccount>;
+  /** Metaplex Token Metadata Program */
+  metaplexProgram?: Address<TAccountMetaplexProgram>;
   decimals: InitializeInstructionDataArgs['decimals'];
   curveType: InitializeInstructionDataArgs['curveType'];
   feeBasisPoints: InitializeInstructionDataArgs['feeBasisPoints'];
@@ -246,6 +280,9 @@ export type InitializeInput<
   feeRecipient: InitializeInstructionDataArgs['feeRecipient'];
   initialBuyAmount: InitializeInstructionDataArgs['initialBuyAmount'];
   initialMaxSol: InitializeInstructionDataArgs['initialMaxSol'];
+  tokenName: InitializeInstructionDataArgs['tokenName'];
+  tokenSymbol: InitializeInstructionDataArgs['tokenSymbol'];
+  tokenUri: InitializeInstructionDataArgs['tokenUri'];
 };
 
 export function getInitializeInstruction<
@@ -260,6 +297,8 @@ export function getInitializeInstruction<
   TAccountAssociatedTokenProgram extends string,
   TAccountRent extends string,
   TAccountFeeRecipientAccount extends string,
+  TAccountMetadataAccount extends string,
+  TAccountMetaplexProgram extends string,
   TProgramAddress extends Address = typeof X_TOKEN_PROGRAM_ADDRESS,
 >(
   input: InitializeInput<
@@ -273,7 +312,9 @@ export function getInitializeInstruction<
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountRent,
-    TAccountFeeRecipientAccount
+    TAccountFeeRecipientAccount,
+    TAccountMetadataAccount,
+    TAccountMetaplexProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): InitializeInstruction<
@@ -288,7 +329,9 @@ export function getInitializeInstruction<
   TAccountTokenProgram,
   TAccountAssociatedTokenProgram,
   TAccountRent,
-  TAccountFeeRecipientAccount
+  TAccountFeeRecipientAccount,
+  TAccountMetadataAccount,
+  TAccountMetaplexProgram
 > {
   // Program address.
   const programAddress = config?.programAddress ?? X_TOKEN_PROGRAM_ADDRESS;
@@ -315,6 +358,11 @@ export function getInitializeInstruction<
       value: input.feeRecipientAccount ?? null,
       isWritable: true,
     },
+    metadataAccount: { value: input.metadataAccount ?? null, isWritable: true },
+    metaplexProgram: {
+      value: input.metaplexProgram ?? null,
+      isWritable: false,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -337,6 +385,10 @@ export function getInitializeInstruction<
     accounts.associatedTokenProgram.value =
       'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL' as Address<'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'>;
   }
+  if (!accounts.metaplexProgram.value) {
+    accounts.metaplexProgram.value =
+      'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s' as Address<'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s'>;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
   const instruction = {
@@ -352,6 +404,8 @@ export function getInitializeInstruction<
       getAccountMeta(accounts.associatedTokenProgram),
       getAccountMeta(accounts.rent),
       getAccountMeta(accounts.feeRecipientAccount),
+      getAccountMeta(accounts.metadataAccount),
+      getAccountMeta(accounts.metaplexProgram),
     ],
     programAddress,
     data: getInitializeInstructionDataEncoder().encode(
@@ -369,7 +423,9 @@ export function getInitializeInstruction<
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountRent,
-    TAccountFeeRecipientAccount
+    TAccountFeeRecipientAccount,
+    TAccountMetadataAccount,
+    TAccountMetaplexProgram
   >;
 
   return instruction;
@@ -403,6 +459,10 @@ export type ParsedInitializeInstruction<
     rent: TAccountMetas[9];
     /** Fee recipient account (for initial pre-buy fee transfer) */
     feeRecipientAccount: TAccountMetas[10];
+    /** Metadata account (PDA from Metaplex) */
+    metadataAccount: TAccountMetas[11];
+    /** Metaplex Token Metadata Program */
+    metaplexProgram: TAccountMetas[12];
   };
   data: InitializeInstructionData;
 };
@@ -415,7 +475,7 @@ export function parseInitializeInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedInitializeInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 11) {
+  if (instruction.accounts.length < 13) {
     // TODO: Coded error.
     throw new Error('Not enough accounts');
   }
@@ -439,6 +499,8 @@ export function parseInitializeInstruction<
       associatedTokenProgram: getNextAccount(),
       rent: getNextAccount(),
       feeRecipientAccount: getNextAccount(),
+      metadataAccount: getNextAccount(),
+      metaplexProgram: getNextAccount(),
     },
     data: getInitializeInstructionDataDecoder().decode(instruction.data),
   };

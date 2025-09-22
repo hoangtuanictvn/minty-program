@@ -17,7 +17,7 @@ import {
 export const root = rootNode(
     programNode({
         name: 'x_token',
-        publicKey: 'C14PX8VvXDvMpthtUMHiwhmrqyW91sNXJq8bRGSTKFS5',
+        publicKey: '9Tqo4t4QYLxNe5HVxWo7zaav13j4pETEtkjyKf7a2VfG',
         version: '1.0.0',
         instructions: [
             instructionNode({
@@ -83,6 +83,21 @@ export const root = rootNode(
                         name: 'initialMaxSol',
                         type: numberTypeNode('u64'),
                         docs: ['Max SOL (lamports) willing to pay for initial pre-buy'],
+                    }),
+                    instructionArgumentNode({
+                        name: 'tokenName',
+                        type: arrayTypeNode(numberTypeNode('u8'), fixedCountNode(32)),
+                        docs: ['Token name (max 32 bytes) - includes length in first byte'],
+                    }),
+                    instructionArgumentNode({
+                        name: 'tokenSymbol',
+                        type: arrayTypeNode(numberTypeNode('u8'), fixedCountNode(10)),
+                        docs: ['Token symbol (max 10 bytes) - includes length in first byte'],
+                    }),
+                    instructionArgumentNode({
+                        name: 'tokenUri',
+                        type: arrayTypeNode(numberTypeNode('u8'), fixedCountNode(200)),
+                        docs: ['Token metadata URI (max 200 bytes) - includes length in first byte'],
                     }),
                 ],
                 accounts: [
@@ -163,6 +178,22 @@ export const root = rootNode(
                         isSigner: false,
                         isWritable: true,
                         docs: ['Fee recipient account (for initial pre-buy fee transfer)'],
+                    }),
+                    instructionAccountNode({
+                        name: 'metadataAccount',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ['Metadata account (PDA from Metaplex)'],
+                    }),
+                    instructionAccountNode({
+                        name: 'metaplexProgram',
+                        defaultValue: publicKeyValueNode(
+                            'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s',
+                            'metaplexProgram'
+                        ),
+                        isSigner: false,
+                        isWritable: false,
+                        docs: ['Metaplex Token Metadata Program'],
                     }),
                 ],
             }),

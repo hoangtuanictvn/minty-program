@@ -21,7 +21,7 @@ import {
 } from '../instructions';
 
 export const X_TOKEN_PROGRAM_ADDRESS =
-  'C14PX8VvXDvMpthtUMHiwhmrqyW91sNXJq8bRGSTKFS5' as Address<'C14PX8VvXDvMpthtUMHiwhmrqyW91sNXJq8bRGSTKFS5'>;
+  '9Tqo4t4QYLxNe5HVxWo7zaav13j4pETEtkjyKf7a2VfG' as Address<'9Tqo4t4QYLxNe5HVxWo7zaav13j4pETEtkjyKf7a2VfG'>;
 
 export enum XTokenInstruction {
   Initialize,
@@ -56,7 +56,7 @@ export function identifyXTokenInstruction(
 }
 
 export type ParsedXTokenInstruction<
-  TProgram extends string = 'C14PX8VvXDvMpthtUMHiwhmrqyW91sNXJq8bRGSTKFS5',
+  TProgram extends string = '9Tqo4t4QYLxNe5HVxWo7zaav13j4pETEtkjyKf7a2VfG',
 > =
   | ({
       instructionType: XTokenInstruction.Initialize;
