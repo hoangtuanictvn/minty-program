@@ -8,7 +8,7 @@ pub mod instructions;
 pub mod processor;
 pub mod state;
 
-pinocchio_pubkey::declare_id!("9Tqo4t4QYLxNe5HVxWo7zaav13j4pETEtkjyKf7a2VfG");
+pinocchio_pubkey::declare_id!("7utv7LmctA7qFDHnKKdHAXuUV2WWSG49a4QaYythRZNZ");
 
 program_entrypoint!(process_instruction);
 no_allocator!();
