@@ -2,12 +2,8 @@ use bytemuck::{Pod, Zeroable};
 use pinocchio::program_error::ProgramError;
 
 pub mod x_token;
-pub mod user_profile;
-pub mod trading_stats;
 
 pub use x_token::*;
-pub use user_profile::*;
-pub use trading_stats::*;
 
 /// Trait for loading and storing account data
 pub trait AccountData: Pod + Zeroable {

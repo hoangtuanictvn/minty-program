@@ -17,7 +17,7 @@ import {
 export const root = rootNode(
     programNode({
         name: 'x_token',
-        publicKey: '7utv7LmctA7qFDHnKKdHAXuUV2WWSG49a4QaYythRZNZ',
+        publicKey: '94MX9QQthPvDmYz1wGR6QbK8tRRhw7NmHnWnFxYMuPSC',
         version: '1.0.0',
         instructions: [
             instructionNode({
@@ -260,12 +260,6 @@ export const root = rootNode(
                         docs: ['Fee recipient account'],
                     }),
                     instructionAccountNode({
-                        name: 'tradingStats',
-                        isSigner: false,
-                        isWritable: true,
-                        docs: ["Buyer's trading stats account"],
-                    }),
-                    instructionAccountNode({
                         name: 'systemProgram',
                         defaultValue: publicKeyValueNode(
                             '11111111111111111111111111111111',
@@ -360,12 +354,6 @@ export const root = rootNode(
                         docs: ['Fee recipient account'],
                     }),
                     instructionAccountNode({
-                        name: 'tradingStats',
-                        isSigner: false,
-                        isWritable: true,
-                        docs: ["Seller's trading stats account"],
-                    }),
-                    instructionAccountNode({
                         name: 'tokenProgram',
                         defaultValue: publicKeyValueNode(
                             'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
@@ -385,101 +373,6 @@ export const root = rootNode(
                         isWritable: false,
                         docs: ['System Program'],
                     }),
-                ],
-            }),
-            instructionNode({
-                name: 'updateProfile',
-                discriminators: [
-                    constantDiscriminatorNode(
-                        constantValueNode(numberTypeNode('u8'), numberValueNode(3))
-                    ),
-                ],
-                arguments: [
-                    instructionArgumentNode({
-                        name: 'discriminator',
-                        type: numberTypeNode('u8'),
-                        defaultValue: numberValueNode(3),
-                        defaultValueStrategy: 'omitted',
-                    }),
-                    instructionArgumentNode({
-                        name: 'usernameLen',
-                        type: numberTypeNode('u8'),
-                        docs: ['Username length (max 32 characters)'],
-                    }),
-                    instructionArgumentNode({
-                        name: 'bioLen',
-                        type: numberTypeNode('u8'),
-                        docs: ['Bio length (max 200 characters)'],
-                    }),
-                    instructionArgumentNode({
-                        name: '_padding',
-                        type: numberTypeNode('u16'),
-                        docs: ['Padding for alignment'],
-                    }),
-                    instructionArgumentNode({
-                        name: 'username',
-                        type: arrayTypeNode(numberTypeNode('u8'), fixedCountNode(32)),
-                        docs: ['Username (32 bytes)'],
-                    }),
-                    instructionArgumentNode({
-                        name: 'bio',
-                        type: arrayTypeNode(numberTypeNode('u8'), fixedCountNode(200)),
-                        docs: ['Bio (200 bytes)'],
-                    }),
-                ],
-                accounts: [
-                    instructionAccountNode({
-                        name: 'userProfile',
-                        isSigner: false,
-                        isWritable: true,
-                        docs: ['User profile account (PDA)'],
-                    }),
-                    instructionAccountNode({
-                        name: 'user',
-                        isSigner: true,
-                        isWritable: true,
-                        docs: ['User wallet (must be signer)'],
-                    }),
-                    instructionAccountNode({
-                        name: 'systemProgram',
-                        defaultValue: publicKeyValueNode(
-                            '11111111111111111111111111111111',
-                            'systemProgram'
-                        ),
-                        isSigner: false,
-                        isWritable: false,
-                        docs: ['System Program'],
-                    }),
-                ],
-            }),
-            instructionNode({
-                name: 'getLeaderboard',
-                discriminators: [
-                    constantDiscriminatorNode(
-                        constantValueNode(numberTypeNode('u8'), numberValueNode(4))
-                    ),
-                ],
-                arguments: [
-                    instructionArgumentNode({
-                        name: 'discriminator',
-                        type: numberTypeNode('u8'),
-                        defaultValue: numberValueNode(4),
-                        defaultValueStrategy: 'omitted',
-                    }),
-                    instructionArgumentNode({
-                        name: 'limit',
-                        type: numberTypeNode('u8'),
-                        docs: ['Number of top traders to return (max 100)'],
-                    }),
-                    instructionArgumentNode({
-                        name: 'offset',
-                        type: numberTypeNode('u8'),
-                        docs: ['Offset for pagination'],
-                    }),
-                ],
-                accounts: [
-                    // No accounts needed for this instruction as it's read-only
-                    // The data will be returned via program logs or client-side account scanning
                 ],
             }),
         ],

@@ -14,21 +14,17 @@ import {
 } from '@solana/kit';
 import {
   type ParsedBuyTokensInstruction,
-  type ParsedGetLeaderboardInstruction,
   type ParsedInitializeInstruction,
   type ParsedSellTokensInstruction,
-  type ParsedUpdateProfileInstruction,
 } from '../instructions';
 
 export const X_TOKEN_PROGRAM_ADDRESS =
-  '7utv7LmctA7qFDHnKKdHAXuUV2WWSG49a4QaYythRZNZ' as Address<'7utv7LmctA7qFDHnKKdHAXuUV2WWSG49a4QaYythRZNZ'>;
+  '94MX9QQthPvDmYz1wGR6QbK8tRRhw7NmHnWnFxYMuPSC' as Address<'94MX9QQthPvDmYz1wGR6QbK8tRRhw7NmHnWnFxYMuPSC'>;
 
 export enum XTokenInstruction {
   Initialize,
   BuyTokens,
   SellTokens,
-  UpdateProfile,
-  GetLeaderboard,
 }
 
 export function identifyXTokenInstruction(
@@ -44,32 +40,20 @@ export function identifyXTokenInstruction(
   if (containsBytes(data, getU8Encoder().encode(2), 0)) {
     return XTokenInstruction.SellTokens;
   }
-  if (containsBytes(data, getU8Encoder().encode(3), 0)) {
-    return XTokenInstruction.UpdateProfile;
-  }
-  if (containsBytes(data, getU8Encoder().encode(4), 0)) {
-    return XTokenInstruction.GetLeaderboard;
-  }
   throw new Error(
     'The provided instruction could not be identified as a xToken instruction.',
   );
 }
 
 export type ParsedXTokenInstruction<
-  TProgram extends string = '7utv7LmctA7qFDHnKKdHAXuUV2WWSG49a4QaYythRZNZ',
+  TProgram extends string = '94MX9QQthPvDmYz1wGR6QbK8tRRhw7NmHnWnFxYMuPSC',
 > =
   | ({
-    instructionType: XTokenInstruction.Initialize;
-  } & ParsedInitializeInstruction<TProgram>)
+      instructionType: XTokenInstruction.Initialize;
+    } & ParsedInitializeInstruction<TProgram>)
   | ({
-    instructionType: XTokenInstruction.BuyTokens;
-  } & ParsedBuyTokensInstruction<TProgram>)
+      instructionType: XTokenInstruction.BuyTokens;
+    } & ParsedBuyTokensInstruction<TProgram>)
   | ({
-    instructionType: XTokenInstruction.SellTokens;
-  } & ParsedSellTokensInstruction<TProgram>)
-  | ({
-    instructionType: XTokenInstruction.UpdateProfile;
-  } & ParsedUpdateProfileInstruction<TProgram>)
-  | ({
-    instructionType: XTokenInstruction.GetLeaderboard;
-  } & ParsedGetLeaderboardInstruction<TProgram>);
+      instructionType: XTokenInstruction.SellTokens;
+    } & ParsedSellTokensInstruction<TProgram>);

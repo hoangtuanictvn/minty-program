@@ -47,7 +47,6 @@ export type BuyTokensInstruction<
   TAccountBuyerTokenAccount extends string | AccountMeta<string> = string,
   TAccountTreasury extends string | AccountMeta<string> = string,
   TAccountFeeRecipient extends string | AccountMeta<string> = string,
-  TAccountTradingStats extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends
     | string
     | AccountMeta<string> = '11111111111111111111111111111111',
@@ -81,9 +80,6 @@ export type BuyTokensInstruction<
       TAccountFeeRecipient extends string
         ? WritableAccount<TAccountFeeRecipient>
         : TAccountFeeRecipient,
-      TAccountTradingStats extends string
-        ? WritableAccount<TAccountTradingStats>
-        : TAccountTradingStats,
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
@@ -148,7 +144,6 @@ export type BuyTokensInput<
   TAccountBuyerTokenAccount extends string = string,
   TAccountTreasury extends string = string,
   TAccountFeeRecipient extends string = string,
-  TAccountTradingStats extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountAssociatedTokenProgram extends string = string,
@@ -165,8 +160,6 @@ export type BuyTokensInput<
   treasury: Address<TAccountTreasury>;
   /** Fee recipient account */
   feeRecipient: Address<TAccountFeeRecipient>;
-  /** Buyer's trading stats account */
-  tradingStats: Address<TAccountTradingStats>;
   /** System Program */
   systemProgram?: Address<TAccountSystemProgram>;
   /** Token Program */
@@ -184,7 +177,6 @@ export function getBuyTokensInstruction<
   TAccountBuyerTokenAccount extends string,
   TAccountTreasury extends string,
   TAccountFeeRecipient extends string,
-  TAccountTradingStats extends string,
   TAccountSystemProgram extends string,
   TAccountTokenProgram extends string,
   TAccountAssociatedTokenProgram extends string,
@@ -197,7 +189,6 @@ export function getBuyTokensInstruction<
     TAccountBuyerTokenAccount,
     TAccountTreasury,
     TAccountFeeRecipient,
-    TAccountTradingStats,
     TAccountSystemProgram,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram
@@ -211,7 +202,6 @@ export function getBuyTokensInstruction<
   TAccountBuyerTokenAccount,
   TAccountTreasury,
   TAccountFeeRecipient,
-  TAccountTradingStats,
   TAccountSystemProgram,
   TAccountTokenProgram,
   TAccountAssociatedTokenProgram
@@ -230,7 +220,6 @@ export function getBuyTokensInstruction<
     },
     treasury: { value: input.treasury ?? null, isWritable: true },
     feeRecipient: { value: input.feeRecipient ?? null, isWritable: true },
-    tradingStats: { value: input.tradingStats ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
     associatedTokenProgram: {
@@ -269,7 +258,6 @@ export function getBuyTokensInstruction<
       getAccountMeta(accounts.buyerTokenAccount),
       getAccountMeta(accounts.treasury),
       getAccountMeta(accounts.feeRecipient),
-      getAccountMeta(accounts.tradingStats),
       getAccountMeta(accounts.systemProgram),
       getAccountMeta(accounts.tokenProgram),
       getAccountMeta(accounts.associatedTokenProgram),
@@ -286,7 +274,6 @@ export function getBuyTokensInstruction<
     TAccountBuyerTokenAccount,
     TAccountTreasury,
     TAccountFeeRecipient,
-    TAccountTradingStats,
     TAccountSystemProgram,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram
@@ -313,14 +300,12 @@ export type ParsedBuyTokensInstruction<
     treasury: TAccountMetas[4];
     /** Fee recipient account */
     feeRecipient: TAccountMetas[5];
-    /** Buyer's trading stats account */
-    tradingStats: TAccountMetas[6];
     /** System Program */
-    systemProgram: TAccountMetas[7];
+    systemProgram: TAccountMetas[6];
     /** Token Program */
-    tokenProgram: TAccountMetas[8];
+    tokenProgram: TAccountMetas[7];
     /** Associated Token Program */
-    associatedTokenProgram: TAccountMetas[9];
+    associatedTokenProgram: TAccountMetas[8];
   };
   data: BuyTokensInstructionData;
 };
@@ -333,7 +318,7 @@ export function parseBuyTokensInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedBuyTokensInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 10) {
+  if (instruction.accounts.length < 9) {
     // TODO: Coded error.
     throw new Error('Not enough accounts');
   }
@@ -352,7 +337,6 @@ export function parseBuyTokensInstruction<
       buyerTokenAccount: getNextAccount(),
       treasury: getNextAccount(),
       feeRecipient: getNextAccount(),
-      tradingStats: getNextAccount(),
       systemProgram: getNextAccount(),
       tokenProgram: getNextAccount(),
       associatedTokenProgram: getNextAccount(),

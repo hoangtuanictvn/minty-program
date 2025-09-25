@@ -5,7 +5,7 @@ use pinocchio::{
 };
 use pinocchio_log::log;
 
-use crate::instructions::{Instruction, Initialize, BuyTokens, SellTokens, UpdateProfile, GetLeaderboard};
+use crate::instructions::{Instruction, Initialize, BuyTokens, SellTokens};
 
 /// Main instruction processor
 #[inline(always)]
@@ -63,15 +63,6 @@ pub fn process_instruction(
             let mut sell_tokens = SellTokens::try_from((accounts, data))?;
             sell_tokens.handler()
         }
-        Instruction::UpdateProfile => {
-            log!("Instruction: UpdateProfile");
-            let mut update_profile = UpdateProfile::try_from((accounts, data))?;
-            update_profile.handler()
-        }
-        Instruction::GetLeaderboard => {
-            log!("Instruction: GetLeaderboard");
-            let get_leaderboard = GetLeaderboard::try_from((accounts, data))?;
-            get_leaderboard.handler()
-        }
+        
     }
 }
