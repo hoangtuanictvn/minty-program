@@ -17,7 +17,7 @@ import {
 export const root = rootNode(
     programNode({
         name: 'x_token',
-        publicKey: '94MX9QQthPvDmYz1wGR6QbK8tRRhw7NmHnWnFxYMuPSC',
+        publicKey: 'ASXm2vSkEpLKQ3YnpdCEbhADQw86gefgFQi5DbyVZonL',
         version: '1.0.0',
         instructions: [
             instructionNode({
