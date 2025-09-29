@@ -5,7 +5,7 @@ use pinocchio::{
 };
 use pinocchio_log::log;
 
-use crate::instructions::{Instruction, Initialize, BuyTokens, SellTokens};
+use crate::instructions::{Instruction, Initialize, BuyTokens, SellTokens, WithdrawReserves, AdminMint};
 
 /// Main instruction processor
 #[inline(always)]
@@ -43,10 +43,8 @@ pub fn process_instruction(
     match Instruction::try_from(*discriminator)? {
         Instruction::Initialize => {
             log!("INIT_MARKER_V2");
-            // Validate data size against Rust struct length
-            if data.len() == crate::instructions::initialize::InitializeInstructionData::LEN {
-                log!("initialize_data_len_ok");
-            } else {
+            // Re-enable length check: data no longer includes discriminator
+            if data.len() != crate::instructions::initialize::InitializeInstructionData::LEN {
                 log!("initialize_data_len_mismatch");
                 return Err(ProgramError::InvalidInstructionData);
             }
@@ -63,6 +61,15 @@ pub fn process_instruction(
             let mut sell_tokens = SellTokens::try_from((accounts, data))?;
             sell_tokens.handler()
         }
-        
+        Instruction::WithdrawReserves => {
+            log!("Instruction: WithdrawReserves");
+            let mut withdraw_reserves = WithdrawReserves::try_from((accounts, data))?;
+            withdraw_reserves.handler()
+        }
+        Instruction::AdminMint => {
+            log!("Instruction: AdminMint");
+            let mut admin_mint = AdminMint::try_from((accounts, data))?;
+            admin_mint.handler()
+        }
     }
 }

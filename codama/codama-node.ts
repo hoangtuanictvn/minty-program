@@ -29,12 +29,6 @@ export const root = rootNode(
                 ],
                 arguments: [
                     instructionArgumentNode({
-                        name: 'discriminator',
-                        type: numberTypeNode('u8'),
-                        defaultValue: numberValueNode(0),
-                        defaultValueStrategy: 'omitted',
-                    }),
-                    instructionArgumentNode({
                         name: 'decimals',
                         type: numberTypeNode('u8'),
                         docs: ['The number of decimals for the token.'],
@@ -206,12 +200,6 @@ export const root = rootNode(
                 ],
                 arguments: [
                     instructionArgumentNode({
-                        name: 'discriminator',
-                        type: numberTypeNode('u8'),
-                        defaultValue: numberValueNode(1),
-                        defaultValueStrategy: 'omitted',
-                    }),
-                    instructionArgumentNode({
                         name: 'tokenAmount',
                         type: numberTypeNode('u64'),
                         docs: ['Amount of tokens to buy'],
@@ -300,12 +288,6 @@ export const root = rootNode(
                 ],
                 arguments: [
                     instructionArgumentNode({
-                        name: 'discriminator',
-                        type: numberTypeNode('u8'),
-                        defaultValue: numberValueNode(2),
-                        defaultValueStrategy: 'omitted',
-                    }),
-                    instructionArgumentNode({
                         name: 'tokenAmount',
                         type: numberTypeNode('u64'),
                         docs: ['Amount of tokens to sell'],
@@ -372,6 +354,114 @@ export const root = rootNode(
                         isSigner: false,
                         isWritable: false,
                         docs: ['System Program'],
+                    }),
+                ],
+            }),
+            instructionNode({
+                name: 'withdrawReserves',
+                discriminators: [
+                    constantDiscriminatorNode(
+                        constantValueNode(numberTypeNode('u8'), numberValueNode(3))
+                    ),
+                ],
+                arguments: [
+                    instructionArgumentNode({
+                        name: 'lamports',
+                        type: numberTypeNode('u64'),
+                        docs: ['0 = withdraw all, otherwise exact lamports to withdraw'],
+                    }),
+                ],
+                accounts: [
+                    instructionAccountNode({
+                        name: 'authority',
+                        isSigner: true,
+                        isWritable: false,
+                        docs: ['Authority that controls the bonding curve'],
+                    }),
+                    instructionAccountNode({
+                        name: 'bondingCurve',
+                        isSigner: false,
+                        isWritable: false,
+                        docs: ['Bonding curve state account (PDA)'],
+                    }),
+                    instructionAccountNode({
+                        name: 'mint',
+                        isSigner: false,
+                        isWritable: false,
+                        docs: ['Token mint account'],
+                    }),
+                    instructionAccountNode({
+                        name: 'treasury',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ['Treasury PDA (system-owned) holding SOL reserves'],
+                    }),
+                    instructionAccountNode({
+                        name: 'recipient',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ['Recipient wallet to receive lamports'],
+                    }),
+                    instructionAccountNode({
+                        name: 'systemProgram',
+                        defaultValue: publicKeyValueNode(
+                            '11111111111111111111111111111111',
+                            'systemProgram'
+                        ),
+                        isSigner: false,
+                        isWritable: false,
+                        docs: ['System Program'],
+                    }),
+                ],
+            }),
+            instructionNode({
+                name: 'adminMint',
+                discriminators: [
+                    constantDiscriminatorNode(
+                        constantValueNode(numberTypeNode('u8'), numberValueNode(4))
+                    ),
+                ],
+                arguments: [
+                    instructionArgumentNode({
+                        name: 'amount',
+                        type: numberTypeNode('u64'),
+                        docs: ['Amount to mint (base units)'],
+                    }),
+                ],
+                accounts: [
+                    instructionAccountNode({
+                        name: 'authority',
+                        isSigner: true,
+                        isWritable: false,
+                        docs: ['Authority that controls the bonding curve'],
+                    }),
+                    instructionAccountNode({
+                        name: 'bondingCurve',
+                        isSigner: false,
+                        isWritable: false,
+                        docs: ['Bonding curve state account (PDA)'],
+                    }),
+                    instructionAccountNode({
+                        name: 'mint',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ['Token mint account'],
+                    }),
+                    instructionAccountNode({
+                        name: 'recipientTokenAccount',
+                        isSigner: false,
+                        isWritable: true,
+                        docs: ['Recipient token account (ATA)'],
+                    }),
+                    instructionAccountNode({
+                        name: 'tokenProgram',
+                        defaultValue: publicKeyValueNode(
+                            'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+                            'tokenProgram'
+                        ),
+                        isSigner: false,
+                        isWritable: false,
+                        docs: ['Token Program'],
                     }),
                 ],
             }),

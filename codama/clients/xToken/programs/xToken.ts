@@ -13,9 +13,11 @@ import {
   type ReadonlyUint8Array,
 } from '@solana/kit';
 import {
+  type ParsedAdminMintInstruction,
   type ParsedBuyTokensInstruction,
   type ParsedInitializeInstruction,
   type ParsedSellTokensInstruction,
+  type ParsedWithdrawReservesInstruction,
 } from '../instructions';
 
 export const X_TOKEN_PROGRAM_ADDRESS =
@@ -25,6 +27,8 @@ export enum XTokenInstruction {
   Initialize,
   BuyTokens,
   SellTokens,
+  WithdrawReserves,
+  AdminMint,
 }
 
 export function identifyXTokenInstruction(
@@ -40,6 +44,12 @@ export function identifyXTokenInstruction(
   if (containsBytes(data, getU8Encoder().encode(2), 0)) {
     return XTokenInstruction.SellTokens;
   }
+  if (containsBytes(data, getU8Encoder().encode(3), 0)) {
+    return XTokenInstruction.WithdrawReserves;
+  }
+  if (containsBytes(data, getU8Encoder().encode(4), 0)) {
+    return XTokenInstruction.AdminMint;
+  }
   throw new Error(
     'The provided instruction could not be identified as a xToken instruction.',
   );
@@ -49,11 +59,17 @@ export type ParsedXTokenInstruction<
   TProgram extends string = 'ASXm2vSkEpLKQ3YnpdCEbhADQw86gefgFQi5DbyVZonL',
 > =
   | ({
-    instructionType: XTokenInstruction.Initialize;
-  } & ParsedInitializeInstruction<TProgram>)
+      instructionType: XTokenInstruction.Initialize;
+    } & ParsedInitializeInstruction<TProgram>)
   | ({
-    instructionType: XTokenInstruction.BuyTokens;
-  } & ParsedBuyTokensInstruction<TProgram>)
+      instructionType: XTokenInstruction.BuyTokens;
+    } & ParsedBuyTokensInstruction<TProgram>)
   | ({
-    instructionType: XTokenInstruction.SellTokens;
-  } & ParsedSellTokensInstruction<TProgram>);
+      instructionType: XTokenInstruction.SellTokens;
+    } & ParsedSellTokensInstruction<TProgram>)
+  | ({
+      instructionType: XTokenInstruction.WithdrawReserves;
+    } & ParsedWithdrawReservesInstruction<TProgram>)
+  | ({
+      instructionType: XTokenInstruction.AdminMint;
+    } & ParsedAdminMintInstruction<TProgram>);

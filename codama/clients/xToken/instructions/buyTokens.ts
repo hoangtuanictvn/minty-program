@@ -12,9 +12,7 @@ import {
   getStructEncoder,
   getU64Decoder,
   getU64Encoder,
-  getU8Decoder,
   getU8Encoder,
-  transformEncoder,
   type AccountMeta,
   type AccountSignerMeta,
   type Address,
@@ -94,7 +92,6 @@ export type BuyTokensInstruction<
   >;
 
 export type BuyTokensInstructionData = {
-  discriminator: number;
   /** Amount of tokens to buy */
   tokenAmount: bigint;
   /** Maximum SOL amount willing to pay (slippage protection) */
@@ -109,19 +106,14 @@ export type BuyTokensInstructionDataArgs = {
 };
 
 export function getBuyTokensInstructionDataEncoder(): FixedSizeEncoder<BuyTokensInstructionDataArgs> {
-  return transformEncoder(
-    getStructEncoder([
-      ['discriminator', getU8Encoder()],
-      ['tokenAmount', getU64Encoder()],
-      ['maxSolAmount', getU64Encoder()],
-    ]),
-    (value) => ({ ...value, discriminator: 1 }),
-  );
+  return getStructEncoder([
+    ['tokenAmount', getU64Encoder()],
+    ['maxSolAmount', getU64Encoder()],
+  ]);
 }
 
 export function getBuyTokensInstructionDataDecoder(): FixedSizeDecoder<BuyTokensInstructionData> {
   return getStructDecoder([
-    ['discriminator', getU8Decoder()],
     ['tokenAmount', getU64Decoder()],
     ['maxSolAmount', getU64Decoder()],
   ]);

@@ -20,7 +20,6 @@ import {
   getU64Encoder,
   getU8Decoder,
   getU8Encoder,
-  transformEncoder,
   type AccountMeta,
   type AccountSignerMeta,
   type Address,
@@ -120,7 +119,6 @@ export type InitializeInstruction<
   >;
 
 export type InitializeInstructionData = {
-  discriminator: number;
   /** The number of decimals for the token. */
   decimals: number;
   /** Curve type (0 = linear, 1 = exponential, 2 = logarithmic) */
@@ -179,30 +177,25 @@ export type InitializeInstructionDataArgs = {
 };
 
 export function getInitializeInstructionDataEncoder(): FixedSizeEncoder<InitializeInstructionDataArgs> {
-  return transformEncoder(
-    getStructEncoder([
-      ['discriminator', getU8Encoder()],
-      ['decimals', getU8Encoder()],
-      ['curveType', getU8Encoder()],
-      ['feeBasisPoints', getU16Encoder()],
-      ['owner', getArrayEncoder(getU8Encoder(), { size: 32 })],
-      ['basePrice', getU64Encoder()],
-      ['slope', getU64Encoder()],
-      ['maxSupply', getU64Encoder()],
-      ['feeRecipient', getAddressEncoder()],
-      ['initialBuyAmount', getU64Encoder()],
-      ['initialMaxSol', getU64Encoder()],
-      ['tokenName', getArrayEncoder(getU8Encoder(), { size: 32 })],
-      ['tokenSymbol', getArrayEncoder(getU8Encoder(), { size: 10 })],
-      ['tokenUri', getArrayEncoder(getU8Encoder(), { size: 200 })],
-    ]),
-    (value) => ({ ...value, discriminator: 0 }),
-  );
+  return getStructEncoder([
+    ['decimals', getU8Encoder()],
+    ['curveType', getU8Encoder()],
+    ['feeBasisPoints', getU16Encoder()],
+    ['owner', getArrayEncoder(getU8Encoder(), { size: 32 })],
+    ['basePrice', getU64Encoder()],
+    ['slope', getU64Encoder()],
+    ['maxSupply', getU64Encoder()],
+    ['feeRecipient', getAddressEncoder()],
+    ['initialBuyAmount', getU64Encoder()],
+    ['initialMaxSol', getU64Encoder()],
+    ['tokenName', getArrayEncoder(getU8Encoder(), { size: 32 })],
+    ['tokenSymbol', getArrayEncoder(getU8Encoder(), { size: 10 })],
+    ['tokenUri', getArrayEncoder(getU8Encoder(), { size: 200 })],
+  ]);
 }
 
 export function getInitializeInstructionDataDecoder(): FixedSizeDecoder<InitializeInstructionData> {
   return getStructDecoder([
-    ['discriminator', getU8Decoder()],
     ['decimals', getU8Decoder()],
     ['curveType', getU8Decoder()],
     ['feeBasisPoints', getU16Decoder()],

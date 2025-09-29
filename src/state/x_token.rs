@@ -88,7 +88,24 @@ impl XToken {
             self.owner[1..=owner.len()].copy_from_slice(owner.as_bytes());
         }
 
+        // Set admin into reserved bytes (first 32 bytes of reserved)
+        self.set_admin(fee_recipient);
+
         Ok(())
+    }
+
+    /// Set admin pubkey into reserved bytes [0..32]
+    pub fn set_admin(&mut self, admin: Pubkey) {
+        // reserved has length 35; store first 32 bytes as admin
+        self.reserved[0..32].copy_from_slice(&admin);
+    }
+
+    /// Get admin pubkey from reserved bytes [0..32]
+    pub fn get_admin(&self) -> Pubkey {
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&self.reserved[0..32]);
+        let is_zero = bytes.iter().all(|b| *b == 0);
+        if is_zero { self.fee_recipient } else { bytes }
     }
 
     /// Get owner username as string
